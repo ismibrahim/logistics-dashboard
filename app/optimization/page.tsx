@@ -55,11 +55,12 @@ async function start() {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        returnToDepot,
-        timeWindows,
-        maxDuration: maxDuration[0],
-        objective,
-      }),
+  returnToDepot,
+  timeWindows,
+  balanceLoad,
+  maxDuration: maxDuration[0],
+  objective,
+}),
     })
 
     const data = await response.json()
