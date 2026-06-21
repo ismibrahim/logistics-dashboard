@@ -15,6 +15,17 @@ import { Badge } from "@/components/ui/badge"
 
 
 
+const VEHICLE_COLORS = [
+  "#2563eb", // blue
+  "#dc2626", // red
+  "#16a34a", // green
+  "#ea580c", // orange
+  "#9333ea", // purple
+  "#0891b2", // cyan
+  "#ca8a04", // yellow/gold
+  "#db2777", // pink
+]
+
 export default function ResultsPage() {
   const [solverResult, setSolverResult] = useState<any>(null)
 
@@ -53,8 +64,7 @@ export default function ResultsPage() {
     }
   }
 
-  const compareSolverError =
-    compareData?.solver_status === "Infeasible" || compareData?.solver_status === "Error"
+  const compareNotSolved = compareData?.solved === false
 
 
 useEffect(() => {
@@ -72,7 +82,7 @@ useEffect(() => {
 
   solverResult?.routes?.map(
 
-    ([vehicleId, route]: [number, number[]]) => ({
+    ([vehicleId, route]: [number, number[]], index: number) => ({
 
       id: vehicleId,
 
@@ -80,7 +90,7 @@ useEffect(() => {
         v => v.vehicle_id === vehicleId
       )?.license_plate ?? `Vehicle ${vehicleId}`,
 
-      color: "#2563eb",
+      color: VEHICLE_COLORS[index % VEHICLE_COLORS.length],
 
       path: route.map((nodeId: number) => {
 
@@ -321,13 +331,13 @@ const totalCost =
             </p>
           )}
 
-          {!compareError && compareSolverError && (
+          {!compareError && compareNotSolved && (
             <p className="text-sm text-destructive">
-              Solver konnte keine gültige Lösung finden (Status: {compareData.solver_status}).
+              Solver konnte in der vorgegebenen Zeit keine Lösung finden (Status: {compareData.solver_status}).
             </p>
           )}
 
-          {!compareError && !compareSolverError && compareData && (
+          {!compareError && !compareNotSolved && compareData && (
             <>
               <p className="text-xs text-muted-foreground">
                 {compareData.num_customers} customers · Status: {compareData.solver_status}
@@ -347,10 +357,10 @@ const totalCost =
                     {compareData.results?.map((r: any) => (
                       <tr key={r.method} className="border-b border-border last:border-0 transition-colors hover:bg-accent/40">
                         <td className="px-5 py-3.5 font-medium text-foreground">{r.method}</td>
-                        <td className="px-5 py-3.5 text-muted-foreground">{r.distance_km.toFixed(2)}</td>
-                        <td className="px-5 py-3.5 text-muted-foreground">{r.runtime_s.toFixed(2)}s</td>
+                        <td className="px-5 py-3.5 text-muted-foreground">{r.distance_km != null ? r.distance_km.toFixed(2) : "–"}</td>
+                        <td className="px-5 py-3.5 text-muted-foreground">{r.runtime_s != null ? `${r.runtime_s.toFixed(2)}s` : "–"}</td>
                         <td className="px-5 py-3.5 text-muted-foreground">
-                          {r.gap_percent === null ? "—" : `+${r.gap_percent.toFixed(1)}%`}
+                          {r.gap_percent != null ? `+${r.gap_percent.toFixed(1)}%` : "–"}
                         </td>
                       </tr>
                     ))}
