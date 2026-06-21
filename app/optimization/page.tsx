@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation"
 import { useState, useEffect } from "react"
-import { Clock, RotateCcw, Timer, Play, Loader2, Settings2, Users, Truck, Warehouse } from "lucide-react"
+import { Clock, RotateCcw, Timer, Play, Loader2, Settings2, Users, Truck, Warehouse, Zap, AlertTriangle } from "lucide-react"
 import { AppShell } from "@/components/app-shell"
 import { Topbar } from "@/components/topbar"
 import { PageHeader } from "@/components/page-header"
@@ -26,7 +26,7 @@ export default function OptimizationPage() {
   const [balanceLoad, setBalanceLoad] = useState(false)
   const [maxDuration, setMaxDuration] = useState([99999])
   const [objective, setObjective] = useState("distance")
-  const [running, setRunning] = useState(false)
+  const [runningMode, setRunningMode] = useState<"auto" | "exact" | null>(null)
   const [customers, setCustomers] = useState([])
   const [vehicles, setVehicles] = useState([])
   const [depots, setDepots] = useState([])
@@ -45,32 +45,31 @@ useEffect(() => {
     .then(data => setDepots(data))
 }, [])
 
-async function start() {
-  setRunning(true)
+async function runOptimization(forceExact: boolean) {
+  setRunningMode(forceExact ? "exact" : "auto")
 
   try {
-    const response = await fetch("http://127.0.0.1:8000/optimize", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+    const response = await fetch(
+      `http://127.0.0.1:8000/optimize?force_exact=${forceExact}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          returnToDepot,
+          timeWindows,
+          balanceLoad,
+          maxDuration: maxDuration[0],
+          objective,
+        }),
       },
-      body: JSON.stringify({
-  returnToDepot,
-  timeWindows,
-  balanceLoad,
-  maxDuration: maxDuration[0],
-  objective,
-}),
-    })
+    )
 
     const data = await response.json()
 
     console.log("RESPONSE STATUS:", response.status)
     console.log("SOLVER DATA:", data)
-
-    alert(JSON.stringify(data, null, 2))
-
-    console.log("Solver Result:", data)
 
     localStorage.setItem("solverResult", JSON.stringify(data))
     router.push("/results")
@@ -78,9 +77,12 @@ async function start() {
     console.error(error)
     alert("Backend nicht erreichbar")
   } finally {
-    setRunning(false)
+    setRunningMode(null)
   }
 }
+
+const running = runningMode !== null
+const largeInstance = customers.length > 50
 
   const hours = Math.floor(maxDuration[0] / 60)
   const mins = maxDuration[0] % 60
@@ -214,13 +216,45 @@ async function start() {
               </div>
             </Card>
 
-            <Button size="lg" className="w-full gap-2" onClick={start} disabled={running}>
-              {running ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" />}
-              {running ? "Optimizing routes…" : "Start Optimization"}
+            <Button
+              size="lg"
+              className="w-full gap-2"
+              onClick={() => runOptimization(false)}
+              disabled={running}
+            >
+              {runningMode === "auto" ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Play className="size-4" />
+              )}
+              {runningMode === "auto" ? "Optimizing routes…" : "Start Optimization"}
             </Button>
             <p className="text-center text-xs text-muted-foreground">
-              The solver typically completes in a few seconds.
+              Uses the exact solver for small instances and automatically switches to a fast
+              heuristic above 50 customers.
             </p>
+
+            <Button
+              size="lg"
+              variant="outline"
+              className="w-full gap-2"
+              onClick={() => runOptimization(true)}
+              disabled={running}
+            >
+              {runningMode === "exact" ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Zap className="size-4" />
+              )}
+              {runningMode === "exact" ? "Running exact solver…" : "Run Exact Solver"}
+            </Button>
+            {largeInstance && (
+              <p className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-500">
+                <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                Achtung: Kann bei dieser Instanzgröße (&gt;50 Kunden) sehr lange dauern oder am
+                Zeitlimit (60s) abbrechen.
+              </p>
+            )}
           </div>
         </div>
       </div>

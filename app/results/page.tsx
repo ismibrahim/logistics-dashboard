@@ -1,7 +1,7 @@
 "use client"
 
 
-import { Download, Route as RouteIcon, Clock, Euro, Gauge, CheckCircle2, Timer, Truck, Users, Warehouse, Loader2, Scale } from "lucide-react"
+import { Download, Route as RouteIcon, Clock, Euro, Gauge, CheckCircle2, Timer, Truck, Users, Warehouse, Loader2, Scale, AlertTriangle, Cpu, Zap } from "lucide-react"
 import { useEffect, useState } from "react"
 import { AppShell } from "@/components/app-shell"
 import { Topbar } from "@/components/topbar"
@@ -10,6 +10,7 @@ import { MapPanel } from "@/components/map-panel"
 import { KpiCard } from "@/components/kpi-card"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 
 
 
@@ -170,13 +171,45 @@ const totalCost =
             : "Loading..."
         }
         actions={
-          <Button size="sm" variant="outline" className="gap-2">
-            <Download className="size-4" /> Export
-          </Button>
+          <div className="flex items-center gap-2">
+            {solverResult?.method_used && (
+              <Badge
+                variant={solverResult.method_used === "exact" ? "default" : "secondary"}
+                className="gap-1"
+              >
+                {solverResult.method_used === "exact" ? (
+                  <Cpu className="size-3" />
+                ) : (
+                  <Zap className="size-3" />
+                )}
+                {solverResult.method_used === "exact" ? "Exakt" : "Heuristik"}
+              </Badge>
+            )}
+            <Button size="sm" variant="outline" className="gap-2">
+              <Download className="size-4" /> Export
+            </Button>
+          </div>
         }
       />
 
       <div className="flex-1 space-y-6 overflow-y-auto p-6">
+        {solverResult?.auto_switched && (
+          <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+            <p>{solverResult.warning}</p>
+          </div>
+        )}
+
+        {solverResult?.time_limit_reached && (
+          <div className="flex items-start gap-3 rounded-lg border border-orange-300 bg-orange-50 px-4 py-3 text-sm text-orange-900 dark:border-orange-900 dark:bg-orange-950/40 dark:text-orange-200">
+            <Timer className="mt-0.5 size-4 shrink-0" />
+            <p>
+              Zeitlimit erreicht — beste gefundene Lösung, Gap:{" "}
+              {solverResult.optimality_gap_percent?.toFixed(1) ?? "?"} %
+            </p>
+          </div>
+        )}
+
         {/* Stats */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <KpiCard label="Total Distance" value={solverResult?.distance?.toFixed(1) ?? "0"} unit="km" icon={RouteIcon}/>
