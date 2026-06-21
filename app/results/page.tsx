@@ -203,6 +203,15 @@ const totalCost =
       />
 
       <div className="flex-1 space-y-6 overflow-y-auto p-6">
+        {solverResult?.solved === false && (
+          <div className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+            <p>
+              Solver konnte keine gültige Lösung finden (Status: {solverResult.solver_status}).
+            </p>
+          </div>
+        )}
+
         {solverResult?.auto_switched && (
           <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
