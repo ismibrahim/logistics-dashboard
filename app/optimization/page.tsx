@@ -30,11 +30,15 @@ export default function OptimizationPage() {
   const [customers, setCustomers] = useState([])
   const [vehicles, setVehicles] = useState([])
   const [depots, setDepots] = useState([])
+  const [selectedCustomerIds, setSelectedCustomerIds] = useState<Set<number>>(new Set())
 
 useEffect(() => {
   fetch("http://127.0.0.1:8000/customers")
     .then(res => res.json())
-    .then(data => setCustomers(data))
+    .then(data => {
+      setCustomers(data)
+      setSelectedCustomerIds(new Set(data.map((c: any) => c.customer_id)))
+    })
 
   fetch("http://127.0.0.1:8000/vehicles")
     .then(res => res.json())
@@ -45,10 +49,28 @@ useEffect(() => {
     .then(data => setDepots(data))
 }, [])
 
+function toggleCustomer(id: number, checked: boolean) {
+  setSelectedCustomerIds((prev) => {
+    const next = new Set(prev)
+    if (checked) next.add(id)
+    else next.delete(id)
+    return next
+  })
+}
+
+function toggleAllCustomers() {
+  setSelectedCustomerIds((prev) =>
+    prev.size === customers.length
+      ? new Set()
+      : new Set(customers.map((c: any) => c.customer_id)),
+  )
+}
+
 async function runOptimization(forceExact: boolean) {
   setRunningMode(forceExact ? "exact" : "auto")
 
   try {
+    const allSelected = selectedCustomerIds.size === customers.length
     const response = await fetch(
       `http://127.0.0.1:8000/optimize?force_exact=${forceExact}`,
       {
@@ -62,6 +84,7 @@ async function runOptimization(forceExact: boolean) {
           balanceLoad,
           maxDuration: maxDuration[0],
           objective,
+          customer_ids: allSelected ? undefined : Array.from(selectedCustomerIds),
         }),
       },
     )
@@ -82,7 +105,9 @@ async function runOptimization(forceExact: boolean) {
 }
 
 const running = runningMode !== null
-const largeInstance = customers.length > 50
+const largeInstance = selectedCustomerIds.size > 50
+const noCustomersSelected = selectedCustomerIds.size === 0
+const allCustomersSelected = customers.length > 0 && selectedCustomerIds.size === customers.length
 
   const hours = Math.floor(maxDuration[0] / 60)
   const mins = maxDuration[0] % 60
@@ -98,6 +123,42 @@ const largeInstance = customers.length > 50
       <div className="flex-1 overflow-y-auto p-6">
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="space-y-6 lg:col-span-2">
+            {/* Customer selection */}
+            <Card className="gap-4 p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Users className="size-4 text-primary" />
+                  <h2 className="text-sm font-semibold text-foreground">Customers</h2>
+                </div>
+                <Button variant="ghost" size="sm" onClick={toggleAllCustomers}>
+                  {allCustomersSelected ? "Deselect all" : "Select all"}
+                </Button>
+              </div>
+              <Separator />
+              <div className="max-h-64 space-y-1 overflow-y-auto pr-1">
+                {customers.map((c: any) => (
+                  <label
+                    key={c.customer_id}
+                    className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent/40"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedCustomerIds.has(c.customer_id)}
+                      onChange={(e) => toggleCustomer(c.customer_id, e.target.checked)}
+                    />
+                    <span className="text-foreground">{c.name}</span>
+                    <span className="text-xs text-muted-foreground">#{c.customer_id}</span>
+                  </label>
+                ))}
+              </div>
+              {noCustomersSelected && (
+                <p className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-500">
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                  Mindestens einen Kunden auswählen.
+                </p>
+              )}
+            </Card>
+
             {/* Constraints */}
             <Card className="gap-5 p-6">
               <div className="flex items-center gap-2">
@@ -197,7 +258,7 @@ const largeInstance = customers.length > 50
               <div className="space-y-3 text-sm">
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-2 text-muted-foreground"><Users className="size-4" />Customers</span>
-                  <span className="font-medium text-foreground">{customers.length}</span>
+                  <span className="font-medium text-foreground">{selectedCustomerIds.size} / {customers.length}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-2 text-muted-foreground"><Truck className="size-4" />Vehicles</span>
@@ -220,7 +281,7 @@ const largeInstance = customers.length > 50
               size="lg"
               className="w-full gap-2"
               onClick={() => runOptimization(false)}
-              disabled={running}
+              disabled={running || noCustomersSelected}
             >
               {runningMode === "auto" ? (
                 <Loader2 className="size-4 animate-spin" />
@@ -239,7 +300,7 @@ const largeInstance = customers.length > 50
               variant="outline"
               className="w-full gap-2"
               onClick={() => runOptimization(true)}
-              disabled={running}
+              disabled={running || noCustomersSelected}
             >
               {runningMode === "exact" ? (
                 <Loader2 className="size-4 animate-spin" />
