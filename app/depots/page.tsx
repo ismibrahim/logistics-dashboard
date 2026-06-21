@@ -211,12 +211,12 @@ async function deleteDepot(depotId: number) {
                       {getVehicleCount(d.depot_id)}
                     </span>{" "}
                     vehicles
-                    <p className="flex items-center gap-1.5 text-foreground">
-                      <span className="font-medium">
-                        {getCustomerCount(d.depot_id)}
-                      </span>
-                      customers
-                    </p>
+                  </p>
+                  <p className="flex items-center gap-1.5 text-foreground">
+                    <span className="font-medium">
+                      {getCustomerCount(d.depot_id)}
+                    </span>
+                    customers
                   </p>
                 </div>
               </Card>

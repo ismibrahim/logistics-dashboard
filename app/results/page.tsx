@@ -1,7 +1,7 @@
 "use client"
 
 
-import { Download, Route as RouteIcon, Clock, Euro, Gauge, CheckCircle2, Timer, Truck, Users, Warehouse } from "lucide-react"
+import { Download, Route as RouteIcon, Clock, Euro, Gauge, CheckCircle2, Timer, Truck, Users, Warehouse, Loader2, Scale, AlertTriangle, Cpu, Zap } from "lucide-react"
 import { useEffect, useState } from "react"
 import { AppShell } from "@/components/app-shell"
 import { Topbar } from "@/components/topbar"
@@ -10,6 +10,7 @@ import { MapPanel } from "@/components/map-panel"
 import { KpiCard } from "@/components/kpi-card"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 
 
 
@@ -31,6 +32,29 @@ export default function ResultsPage() {
 
   const [vehicles, setVehicles] = useState<any[]>([])
   const [customers, setCustomers] = useState<any[]>([])
+
+  const [compareData, setCompareData] = useState<any>(null)
+  const [compareLoading, setCompareLoading] = useState(false)
+  const [compareError, setCompareError] = useState<string | null>(null)
+
+  async function runCompare() {
+    setCompareLoading(true)
+    setCompareError(null)
+
+    try {
+      const response = await fetch("http://127.0.0.1:8000/compare")
+      const data = await response.json()
+      setCompareData(data)
+    } catch (error) {
+      console.error(error)
+      setCompareError("Backend nicht erreichbar")
+    } finally {
+      setCompareLoading(false)
+    }
+  }
+
+  const compareSolverError =
+    compareData?.solver_status === "Infeasible" || compareData?.solver_status === "Error"
 
 
 useEffect(() => {
@@ -147,13 +171,45 @@ const totalCost =
             : "Loading..."
         }
         actions={
-          <Button size="sm" variant="outline" className="gap-2">
-            <Download className="size-4" /> Export
-          </Button>
+          <div className="flex items-center gap-2">
+            {solverResult?.method_used && (
+              <Badge
+                variant={solverResult.method_used === "exact" ? "default" : "secondary"}
+                className="gap-1"
+              >
+                {solverResult.method_used === "exact" ? (
+                  <Cpu className="size-3" />
+                ) : (
+                  <Zap className="size-3" />
+                )}
+                {solverResult.method_used === "exact" ? "Exakt" : "Heuristik"}
+              </Badge>
+            )}
+            <Button size="sm" variant="outline" className="gap-2">
+              <Download className="size-4" /> Export
+            </Button>
+          </div>
         }
       />
 
       <div className="flex-1 space-y-6 overflow-y-auto p-6">
+        {solverResult?.auto_switched && (
+          <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+            <p>{solverResult.warning}</p>
+          </div>
+        )}
+
+        {solverResult?.time_limit_reached && (
+          <div className="flex items-start gap-3 rounded-lg border border-orange-300 bg-orange-50 px-4 py-3 text-sm text-orange-900 dark:border-orange-900 dark:bg-orange-950/40 dark:text-orange-200">
+            <Timer className="mt-0.5 size-4 shrink-0" />
+            <p>
+              Zeitlimit erreicht — beste gefundene Lösung, Gap:{" "}
+              {solverResult.optimality_gap_percent?.toFixed(1) ?? "?"} %
+            </p>
+          </div>
+        )}
+
         {/* Stats */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <KpiCard label="Total Distance" value={solverResult?.distance?.toFixed(1) ?? "0"} unit="km" icon={RouteIcon}/>
@@ -243,7 +299,69 @@ const totalCost =
         </div>
       </Card>
 
+        <Card className="gap-4 p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-foreground">
+                Solver Comparison
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Exact Solver (MILP) vs. Nearest Neighbor heuristic.
+              </p>
+            </div>
+            <Button size="sm" className="gap-2" onClick={runCompare} disabled={compareLoading}>
+              {compareLoading ? <Loader2 className="size-4 animate-spin" /> : <Scale className="size-4" />}
+              {compareLoading ? "Comparing…" : "Compare Solver vs Heuristic"}
+            </Button>
+          </div>
+
+          {compareError && (
+            <p className="text-sm text-destructive">
+              {compareError}
+            </p>
+          )}
+
+          {!compareError && compareSolverError && (
+            <p className="text-sm text-destructive">
+              Solver konnte keine gültige Lösung finden (Status: {compareData.solver_status}).
+            </p>
+          )}
+
+          {!compareError && !compareSolverError && compareData && (
+            <>
+              <p className="text-xs text-muted-foreground">
+                {compareData.num_customers} customers · Status: {compareData.solver_status}
+              </p>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/50 text-left text-xs uppercase tracking-wider text-muted-foreground">
+                      <th className="px-5 py-3 font-medium">Method</th>
+                      <th className="px-5 py-3 font-medium">Distance (km)</th>
+                      <th className="px-5 py-3 font-medium">Runtime (s)</th>
+                      <th className="px-5 py-3 font-medium">Gap</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {compareData.results?.map((r: any) => (
+                      <tr key={r.method} className="border-b border-border last:border-0 transition-colors hover:bg-accent/40">
+                        <td className="px-5 py-3.5 font-medium text-foreground">{r.method}</td>
+                        <td className="px-5 py-3.5 text-muted-foreground">{r.distance_km.toFixed(2)}</td>
+                        <td className="px-5 py-3.5 text-muted-foreground">{r.runtime_s.toFixed(2)}s</td>
+                        <td className="px-5 py-3.5 text-muted-foreground">
+                          {r.gap_percent === null ? "—" : `+${r.gap_percent.toFixed(1)}%`}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </Card>
+
       </div>
     </AppShell>
   )
-} 
+}
