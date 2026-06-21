@@ -31,7 +31,6 @@ export default function CustomersPage() {
   const [newAddress, setNewAddress] = useState("")
   const [newCity, setNewCity] = useState("")
   const [newDemand, setNewDemand] = useState(1)
-  const [newPriority, setNewPriority] = useState(1)
 
   const [newTwStart, setNewTwStart] =
     useState("08:00")
@@ -128,7 +127,6 @@ async function addCustomer() {
       address: newAddress,
       city: newCity,
       demand: newDemand,
-      priority: newPriority,
       tw_start: newTwStart,
       tw_end: newTwEnd,
       service_time_min: newServiceTime,
@@ -184,7 +182,7 @@ async function deleteCustomer(customerId: number) {
                 Add New Customer
               </h3>
 
-              <div className="grid grid-cols-5 gap-6">
+              <div className="grid grid-cols-4 gap-6">
 
                 <div>
                   <label className="block text-sm font-medium mb-2">
@@ -241,25 +239,6 @@ async function deleteCustomer(customerId: number) {
 
                   <p className="text-xs text-muted-foreground mt-1">
                     Number of units required.
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Priority
-                  </label>
-
-                  <input
-                    type="number"
-                    value={newPriority}
-                    onChange={(e) =>
-                      setNewPriority(Number(e.target.value))
-                    }
-                    className="w-full border p-2 rounded"
-                  />
-
-                  <p className="text-xs text-muted-foreground mt-1">
-                    1 = highest priority
                   </p>
                 </div>
 
