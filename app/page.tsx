@@ -69,9 +69,9 @@ console.log("CUSTOMERS", mapCustomers)
 console.log("DEPOTS", mapDepots)
 
 const avgUtilization =
-  vehicles.length > 0
+  vehicles.length > 0 && customers.length > 0 && solverResult?.routes
     ? Math.round(
-        (solverResult?.routes?.reduce(
+        (solverResult.routes.reduce(
           (sum: number, [, route]: [number, number[]]) =>
             sum + (route.length - 2),
           0
