@@ -10,6 +10,7 @@ import {
   Settings2,
   Route,
   Package,
+  History,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -20,6 +21,7 @@ const nav = [
   { label: "Depots", href: "/depots", icon: Warehouse },
   { label: "Optimization", href: "/optimization", icon: Settings2 },
   { label: "Results", href: "/results", icon: Route },
+  { label: "History", href: "/history", icon: History },
 ]
 
 export function Sidebar() {

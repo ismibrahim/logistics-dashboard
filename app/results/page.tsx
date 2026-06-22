@@ -1,7 +1,7 @@
 "use client"
 
 
-import { Download, Route as RouteIcon, Clock, Euro, Gauge, CheckCircle2, Timer, Truck, Users, Warehouse, Loader2, Scale, AlertTriangle, Cpu, Zap } from "lucide-react"
+import { Download, Route as RouteIcon, Clock, Euro, Gauge, CheckCircle2, Timer, Truck, Users, Warehouse, Loader2, Scale, AlertTriangle, Cpu, Zap, RefreshCw } from "lucide-react"
 import { useEffect, useState } from "react"
 import { AppShell } from "@/components/app-shell"
 import { Topbar } from "@/components/topbar"
@@ -26,17 +26,30 @@ const VEHICLE_COLORS = [
   "#db2777", // pink
 ]
 
+// Baut das MapPanel-"routes"-Format aus einem Solver-/Compare-Ergebnis
+// (gemeinsame Form: {routes: [[vehicleId, nodeIds]], coordinates: {nodeId: [lat,lng]}}).
+// Wird fuer den Haupt-/optimize-Lauf UND beide /compare-Seiten genutzt.
+function buildMapRoutes(result: any, vehicles: any[]) {
+  if (!result?.routes) return []
+
+  return result.routes.map(([vehicleId, route]: [number, number[]], index: number) => ({
+    id: vehicleId,
+    vehicle: vehicles.find((v) => v.vehicle_id === vehicleId)?.license_plate ?? `Vehicle ${vehicleId}`,
+    color: VEHICLE_COLORS[index % VEHICLE_COLORS.length],
+    path: route.map((nodeId: number) => {
+      const coords = result.coordinates[nodeId.toString()]
+      return { lat: coords[0], lng: coords[1] }
+    }),
+  }))
+}
+
 export default function ResultsPage() {
   const [solverResult, setSolverResult] = useState<any>(null)
-
-  console.log("VEHICLE STATS:")
-  console.log(solverResult?.vehicle_stats)
 
   useEffect(() => {
     const data = localStorage.getItem("solverResult")
 
     if (data) {
-      console.log("Loaded Solver Result:", JSON.parse(data))
       setSolverResult(JSON.parse(data))
     }
   }, [])
@@ -48,12 +61,25 @@ export default function ResultsPage() {
   const [compareLoading, setCompareLoading] = useState(false)
   const [compareError, setCompareError] = useState<string | null>(null)
 
-  async function runCompare() {
+  // Kunden-IDs fuer den Benchmark aus den Koordinaten des /optimize-Laufs
+  // ableiten (Depot-Knoten sind >= 1000, siehe cvrp_solver.DEPOT_NODE_BASE) -
+  // so braucht die Optimization-Page keine zusaetzliche customer_ids-Liste
+  // an die Results-Page durchreichen.
+  const customerIdsForCompare: number[] = solverResult?.coordinates
+    ? Object.keys(solverResult.coordinates)
+        .map(Number)
+        .filter((id) => id < 1000)
+    : []
+
+  async function runCompare(customerIds: number[]) {
+    if (customerIds.length === 0) return
+
     setCompareLoading(true)
     setCompareError(null)
 
     try {
-      const response = await fetch("http://127.0.0.1:8000/compare")
+      const query = customerIds.map((id) => `customer_ids=${id}`).join("&")
+      const response = await fetch(`http://127.0.0.1:8000/compare?${query}`)
       const data = await response.json()
       setCompareData(data)
     } catch (error) {
@@ -64,13 +90,21 @@ export default function ResultsPage() {
     }
   }
 
+  // Benchmark-Vergleich wird automatisch geladen, sobald der /optimize-Lauf
+  // (solverResult) vorliegt - auf denselben Kunden wie oben.
+  useEffect(() => {
+    if (customerIdsForCompare.length > 0) {
+      runCompare(customerIdsForCompare)
+    }
+  }, [solverResult])
+
   const compareNotSolved = compareData?.solved === false
 
 
 useEffect(() => {
   fetch("http://127.0.0.1:8000/vehicles")
     .then(res => res.json())
-    .then(data => setVehicles(data)) 
+    .then(data => setVehicles(data))
 }, [])
 useEffect(() => {
   fetch("http://127.0.0.1:8000/customers")
@@ -78,40 +112,10 @@ useEffect(() => {
     .then(data => setCustomers(data))
 }, [])
 
-  const solverRoutes =
+  const solverRoutes = buildMapRoutes(solverResult, vehicles)
+  const exactCompareRoutes = buildMapRoutes(compareData?.exact, vehicles)
+  const heuristicCompareRoutes = buildMapRoutes(compareData?.heuristic, vehicles)
 
-  solverResult?.routes?.map(
-
-    ([vehicleId, route]: [number, number[]], index: number) => ({
-
-      id: vehicleId,
-
-      vehicle: vehicles.find(
-        v => v.vehicle_id === vehicleId
-      )?.license_plate ?? `Vehicle ${vehicleId}`,
-
-      color: VEHICLE_COLORS[index % VEHICLE_COLORS.length],
-
-      path: route.map((nodeId: number) => {
-
-        const coords =
-
-          solverResult.coordinates[nodeId.toString()]
-
-        return {
-
-          lat: coords[0],
-
-          lng: coords[1],
-
-        }
-
-      }),
-
-    })
-
-  ) || []
- 
   const optimizationDetails = [
     { label: "Solver Status",value: solverResult?.status ?? "Loading",icon: CheckCircle2},
     { label: "Solver Runtime", value: "3.1s", icon: Timer },
@@ -169,7 +173,7 @@ const totalCost =
     (sum: number, v: any) => sum + v.cost,
     0
   ) ?? 0
-  
+
   return (
     <AppShell>
       <Topbar />
@@ -237,11 +241,11 @@ const totalCost =
           <KpiCard label="Avg. Load" value={avgLoad} unit="%" icon={Gauge} />
         </div>
 
-        {/* Map */}
+        {/* Map: realer /optimize-Lauf (Multi-Depot, alle Constraints) */}
         <Card className="overflow-hidden p-0">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
             <div>
-              <h2 className="text-sm font-semibold text-foreground">Optimized Routes</h2>
+              <h2 className="text-sm font-semibold text-foreground">Optimization Result</h2>
               <p className="text-xs text-muted-foreground">Color-coded route paths across the network</p>
             </div>
             <div className="flex flex-wrap items-center gap-3 text-xs">
@@ -258,6 +262,96 @@ const totalCost =
             Routes are generated using real road network data from OpenRouteService and optimized using a Multi-Depot
             CVRP/VRPTW model.
           </p>
+        </Card>
+
+        {/* Solver vs. Heuristic Benchmark - vereinfachter Einzeldepot-Vergleich */}
+        <Card className="gap-4 p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-foreground">Solver vs. Heuristic Benchmark</h2>
+              <p className="text-xs text-muted-foreground">
+                Vereinfachter Vergleich auf Einzeldepot-Basis ohne Zeitfenster — Routen können daher von der
+                Multi-Depot-Optimierung oben abweichen. Aussagekräftig ist der direkte Distanz-/Kosten-Vergleich.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-2"
+              onClick={() => runCompare(customerIdsForCompare)}
+              disabled={compareLoading || customerIdsForCompare.length === 0}
+            >
+              {compareLoading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+              {compareLoading ? "Vergleiche…" : "Erneut vergleichen"}
+            </Button>
+          </div>
+
+          {compareError && (
+            <p className="text-sm text-destructive">{compareError}</p>
+          )}
+
+          {!compareError && compareNotSolved && (
+            <p className="text-sm text-destructive">
+              Vergleich nicht möglich (Status: {compareData.solver_status}).
+            </p>
+          )}
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <Card className="overflow-hidden p-0">
+              <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
+                <span className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+                  <Cpu className="size-3.5" /> Exact Solver (MILP)
+                </span>
+              </div>
+              <MapPanel className="h-[360px] rounded-none border-0" routes={exactCompareRoutes} />
+            </Card>
+            <Card className="overflow-hidden p-0">
+              <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
+                <span className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+                  <Zap className="size-3.5" /> Nearest Neighbor (Heuristik)
+                </span>
+              </div>
+              <MapPanel className="h-[360px] rounded-none border-0" routes={heuristicCompareRoutes} />
+            </Card>
+          </div>
+
+          {!compareError && !compareNotSolved && compareData && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50 text-left text-xs uppercase tracking-wider text-muted-foreground">
+                    <th className="px-5 py-3 font-medium">Metric</th>
+                    <th className="px-5 py-3 font-medium">Exact Solver (MILP)</th>
+                    <th className="px-5 py-3 font-medium">Nearest Neighbor</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-b border-border last:border-0">
+                    <td className="px-5 py-3.5 font-medium text-foreground">Total Distance</td>
+                    <td className="px-5 py-3.5 text-muted-foreground">{compareData.exact?.distance_km?.toFixed(2)} km</td>
+                    <td className="px-5 py-3.5 text-muted-foreground">{compareData.heuristic?.distance_km?.toFixed(2)} km</td>
+                  </tr>
+                  <tr className="border-b border-border last:border-0">
+                    <td className="px-5 py-3.5 font-medium text-foreground">Total Cost</td>
+                    <td className="px-5 py-3.5 text-muted-foreground">{compareData.exact?.cost?.toFixed(2)} €</td>
+                    <td className="px-5 py-3.5 text-muted-foreground">{compareData.heuristic?.cost?.toFixed(2)} €</td>
+                  </tr>
+                  <tr className="border-b border-border last:border-0">
+                    <td className="px-5 py-3.5 font-medium text-foreground">Runtime</td>
+                    <td className="px-5 py-3.5 text-muted-foreground">{compareData.exact?.runtime_s?.toFixed(3)} s</td>
+                    <td className="px-5 py-3.5 text-muted-foreground">{compareData.heuristic?.runtime_s?.toFixed(3)} s</td>
+                  </tr>
+                  <tr className="border-b border-border last:border-0">
+                    <td className="px-5 py-3.5 font-medium text-foreground">Gap</td>
+                    <td className="px-5 py-3.5 text-muted-foreground">—</td>
+                    <td className="px-5 py-3.5 text-muted-foreground">
+                      {compareData.heuristic?.gap_percent != null ? `+${compareData.heuristic.gap_percent.toFixed(1)}%` : "–"}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
         </Card>
 
         {/* Optimization details */}
@@ -278,7 +372,7 @@ const totalCost =
             ))}
           </div>
         </Card>
-      
+
         <Card className="gap-4 p-5">
           <div>
             <h2 className="text-sm font-semibold text-foreground">
@@ -317,68 +411,6 @@ const totalCost =
           </table>
         </div>
       </Card>
-
-        <Card className="gap-4 p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-sm font-semibold text-foreground">
-                Solver Comparison
-              </h2>
-              <p className="text-xs text-muted-foreground">
-                Exact Solver (MILP) vs. Nearest Neighbor heuristic.
-              </p>
-            </div>
-            <Button size="sm" className="gap-2" onClick={runCompare} disabled={compareLoading}>
-              {compareLoading ? <Loader2 className="size-4 animate-spin" /> : <Scale className="size-4" />}
-              {compareLoading ? "Comparing…" : "Compare Solver vs Heuristic"}
-            </Button>
-          </div>
-
-          {compareError && (
-            <p className="text-sm text-destructive">
-              {compareError}
-            </p>
-          )}
-
-          {!compareError && compareNotSolved && (
-            <p className="text-sm text-destructive">
-              Solver konnte in der vorgegebenen Zeit keine Lösung finden (Status: {compareData.solver_status}).
-            </p>
-          )}
-
-          {!compareError && !compareNotSolved && compareData && (
-            <>
-              <p className="text-xs text-muted-foreground">
-                {compareData.num_customers} customers · Status: {compareData.solver_status}
-              </p>
-
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border bg-muted/50 text-left text-xs uppercase tracking-wider text-muted-foreground">
-                      <th className="px-5 py-3 font-medium">Method</th>
-                      <th className="px-5 py-3 font-medium">Distance (km)</th>
-                      <th className="px-5 py-3 font-medium">Runtime (s)</th>
-                      <th className="px-5 py-3 font-medium">Gap</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {compareData.results?.map((r: any) => (
-                      <tr key={r.method} className="border-b border-border last:border-0 transition-colors hover:bg-accent/40">
-                        <td className="px-5 py-3.5 font-medium text-foreground">{r.method}</td>
-                        <td className="px-5 py-3.5 text-muted-foreground">{r.distance_km != null ? r.distance_km.toFixed(2) : "–"}</td>
-                        <td className="px-5 py-3.5 text-muted-foreground">{r.runtime_s != null ? `${r.runtime_s.toFixed(2)}s` : "–"}</td>
-                        <td className="px-5 py-3.5 text-muted-foreground">
-                          {r.gap_percent != null ? `+${r.gap_percent.toFixed(1)}%` : "–"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
-        </Card>
 
       </div>
     </AppShell>
