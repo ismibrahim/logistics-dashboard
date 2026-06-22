@@ -6,6 +6,7 @@ import {
   TileLayer,
   CircleMarker,
   Polyline,
+  Popup,
   Tooltip,
   useMap,
 } from "react-leaflet"
@@ -67,15 +68,15 @@ export default function LogisticsMap({
           pathOptions={{
             color: "#ffffff",
             weight: 2,
-            fillColor:"#2563eb",
+            fillColor: "#6b7280",
             fillOpacity: 1,
           }}
         >
-          <Tooltip direction="top" offset={[0, -6]}>
+          <Popup>
             <span className="font-medium">{c.name}</span>
             <br />
-            {c.demand} units · {c.window}
-          </Tooltip>
+            {c.demand} units{c.window ? ` · ${c.window}` : ""}
+          </Popup>
         </CircleMarker>
       ))}
 

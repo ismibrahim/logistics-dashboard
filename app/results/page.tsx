@@ -18,11 +18,11 @@ import { Badge } from "@/components/ui/badge"
 const VEHICLE_COLORS = [
   "#2563eb", // blue
   "#dc2626", // red
-  "#16a34a", // green
   "#ea580c", // orange
   "#9333ea", // purple
   "#0891b2", // cyan
   "#ca8a04", // yellow/gold
+  "#16a34a", // green
   "#db2777", // pink
 ]
 
@@ -56,6 +56,7 @@ export default function ResultsPage() {
 
   const [vehicles, setVehicles] = useState<any[]>([])
   const [customers, setCustomers] = useState<any[]>([])
+  const [depots, setDepots] = useState<any[]>([])
 
   const [compareData, setCompareData] = useState<any>(null)
   const [compareLoading, setCompareLoading] = useState(false)
@@ -111,10 +112,29 @@ useEffect(() => {
     .then(res => res.json())
     .then(data => setCustomers(data))
 }, [])
+useEffect(() => {
+  fetch("http://127.0.0.1:8000/depots")
+    .then(res => res.json())
+    .then(data => setDepots(data))
+}, [])
 
   const solverRoutes = buildMapRoutes(solverResult, vehicles)
   const exactCompareRoutes = buildMapRoutes(compareData?.exact, vehicles)
   const heuristicCompareRoutes = buildMapRoutes(compareData?.heuristic, vehicles)
+
+  const mapCustomers = customers.map((c: any) => ({
+    ...c,
+    id: c.customer_id,
+    lat: c.latitude,
+    lng: c.longitude,
+  }))
+
+  const mapDepots = depots.map((d: any) => ({
+    ...d,
+    id: d.depot_id,
+    lat: d.latitude,
+    lng: d.longitude,
+  }))
 
   const optimizationDetails = [
     { label: "Solver Status",value: solverResult?.status ?? "Loading",icon: CheckCircle2},
@@ -257,7 +277,12 @@ const totalCost =
               ))}
             </div>
           </div>
-          <MapPanel className="h-[440px] rounded-none border-0" routes={solverRoutes} />
+          <MapPanel
+            className="h-[440px] rounded-none border-0"
+            routes={solverRoutes}
+            customers={mapCustomers}
+            depots={mapDepots}
+          />
           <p className="border-t border-border px-5 py-3 text-xs leading-relaxed text-muted-foreground">
             Routes are generated using real road network data from OpenRouteService and optimized using a Multi-Depot
             CVRP/VRPTW model.
@@ -303,7 +328,12 @@ const totalCost =
                   <Cpu className="size-3.5" /> Exact Solver (MILP)
                 </span>
               </div>
-              <MapPanel className="h-[360px] rounded-none border-0" routes={exactCompareRoutes} />
+              <MapPanel
+                className="h-[360px] rounded-none border-0"
+                routes={exactCompareRoutes}
+                customers={mapCustomers}
+                depots={mapDepots}
+              />
             </Card>
             <Card className="overflow-hidden p-0">
               <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
@@ -311,7 +341,12 @@ const totalCost =
                   <Zap className="size-3.5" /> Nearest Neighbor (Heuristik)
                 </span>
               </div>
-              <MapPanel className="h-[360px] rounded-none border-0" routes={heuristicCompareRoutes} />
+              <MapPanel
+                className="h-[360px] rounded-none border-0"
+                routes={heuristicCompareRoutes}
+                customers={mapCustomers}
+                depots={mapDepots}
+              />
             </Card>
           </div>
 
