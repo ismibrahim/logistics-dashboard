@@ -60,6 +60,16 @@ function formatNumber(value: number | null, digits = 2, suffix = ""): string {
   return value != null ? `${value.toFixed(digits)}${suffix}` : "—"
 }
 
+function formatTimestamp(isoTimestamp: string): string {
+  return new Date(isoTimestamp).toLocaleString("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+}
+
 export default function HistoryPage() {
   const [runs, setRuns] = useState<Run[]>([])
   const [loading, setLoading] = useState(true)
@@ -164,7 +174,7 @@ export default function HistoryPage() {
                       className="border-b border-border last:border-0 transition-colors hover:bg-accent/40"
                     >
                       <td className="px-5 py-3.5 whitespace-nowrap text-muted-foreground">
-                        {run.timestamp}
+                        {formatTimestamp(run.timestamp)}
                       </td>
                       <td className="px-5 py-3.5 capitalize text-foreground">{run.method}</td>
                       <td className="px-5 py-3.5 text-muted-foreground">{run.num_customers ?? "—"}</td>
