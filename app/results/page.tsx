@@ -1,7 +1,7 @@
 "use client"
 
 
-import { Download, Route as RouteIcon, Clock, Euro, Gauge, CheckCircle2, Timer, Truck, Users, Warehouse, Loader2, Scale, AlertTriangle, Cpu, Zap, RefreshCw } from "lucide-react"
+import { Download, Route as RouteIcon, Clock, Euro, Gauge, CheckCircle2, Timer, Truck, Users, Warehouse, Loader2, Scale, AlertTriangle, Cpu, Zap, RefreshCw, ChevronRight } from "lucide-react"
 import { useEffect, useState } from "react"
 import { AppShell } from "@/components/app-shell"
 import { Topbar } from "@/components/topbar"
@@ -41,6 +41,36 @@ function buildMapRoutes(result: any, vehicles: any[]) {
       return { lat: coords[0], lng: coords[1] }
     }),
   }))
+}
+
+// Baut die geordnete Stop-Liste (Depot -> Kunden -> Depot) pro Fahrzeug.
+// vehicle_stats wird positionsgleich zu routes vom Backend befuellt (gleicher
+// Solver-Lauf, gleiche Reihenfolge) - die vehicleId in routes[i][0] stammt aus
+// einem anderen ID-Raum als vehicle_stats[i].vehicle_id, daher Pairing per Index.
+function buildRouteDetails(result: any, vehicles: any[], customers: any[], depots: any[]) {
+  if (!result?.routes) return []
+
+  return result.routes.map(([vehicleId, nodeIds]: [number, number[]], index: number) => {
+    const stops = nodeIds.map((nodeId: number) =>
+      nodeId >= 1000
+        ? { type: "depot" as const, label: depots.find((d) => d.depot_id === nodeId - 1000)?.name ?? `Depot ${nodeId}` }
+        : {
+            type: "customer" as const,
+            id: nodeId,
+            label: customers.find((c) => c.customer_id === nodeId)?.name ?? `Customer ${nodeId}`,
+            demand: customers.find((c) => c.customer_id === nodeId)?.demand ?? 0,
+          },
+    )
+
+    return {
+      vehicleId,
+      vehicle: vehicles.find((v) => v.vehicle_id === vehicleId)?.license_plate ?? `Vehicle ${vehicleId}`,
+      color: VEHICLE_COLORS[index % VEHICLE_COLORS.length],
+      startDepot: stops[0]?.type === "depot" ? stops[0].label : "—",
+      stops,
+      stats: result.vehicle_stats?.[index],
+    }
+  })
 }
 
 export default function ResultsPage() {
@@ -121,6 +151,7 @@ useEffect(() => {
   const solverRoutes = buildMapRoutes(solverResult, vehicles)
   const exactCompareRoutes = buildMapRoutes(compareData?.exact, vehicles)
   const heuristicCompareRoutes = buildMapRoutes(compareData?.heuristic, vehicles)
+  const routeDetails = buildRouteDetails(solverResult, vehicles, customers, depots)
 
   const mapCustomers = customers.map((c: any) => ({
     ...c,
@@ -444,6 +475,52 @@ const totalCost =
                ))}
             </tbody>
           </table>
+        </div>
+      </Card>
+
+      <Card className="gap-4 p-5">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">Route Details</h2>
+          <p className="text-xs text-muted-foreground">
+            Reihenfolge der Stops pro Fahrzeug — Depot zu Depot.
+          </p>
+        </div>
+
+        <div className="space-y-4">
+          {routeDetails.map((route: any) => (
+            <div key={route.vehicleId} className="rounded-lg border border-border p-4">
+              <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: route.color }} />
+                {route.vehicle} ({route.startDepot})
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
+                {route.stops.map((stop: any, i: number) => (
+                  <span key={i} className="flex items-center gap-1.5">
+                    {i > 0 && <ChevronRight className="size-3.5 shrink-0" />}
+                    {stop.type === "depot" ? (
+                      <span className="text-foreground">{stop.label}</span>
+                    ) : (
+                      <span>
+                        {stop.label}{" "}
+                        <span className="text-xs">
+                          (#{stop.id}, {stop.demand} units)
+                        </span>
+                      </span>
+                    )}
+                  </span>
+                ))}
+              </div>
+              {route.stats && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Distance: {route.stats.distance} km · Load: {route.stats.demand}/{route.stats.capacity} ·
+                  Utilization: {route.stats.utilization}% · Cost: {route.stats.cost} €
+                </p>
+              )}
+            </div>
+          ))}
+          {routeDetails.length === 0 && (
+            <p className="text-sm text-muted-foreground">Keine Routen vorhanden.</p>
+          )}
         </div>
       </Card>
 
