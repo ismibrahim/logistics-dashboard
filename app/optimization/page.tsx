@@ -13,19 +13,12 @@ import { Slider } from "@/components/ui/slider"
 import { Separator } from "@/components/ui/separator"
 
 
-const objectives = [
-  { id: "distance", label: "Minimize distance", desc: "Shortest total travel distance" },
-  { id: "time", label: "Minimize duration", desc: "Fastest total route time" },
-  { id: "cost", label: "Minimize cost", desc: "Lowest operating expense" },
-]
-
 export default function OptimizationPage() {
   const router = useRouter()
   const [timeWindows, setTimeWindows] = useState(false)
   const [returnToDepot, setReturnToDepot] = useState(true)
   const [balanceLoad, setBalanceLoad] = useState(false)
   const [maxDuration, setMaxDuration] = useState([99999])
-  const [objective, setObjective] = useState("distance")
   const [runningMode, setRunningMode] = useState<"auto" | "exact" | null>(null)
   const [customers, setCustomers] = useState([])
   const [vehicles, setVehicles] = useState([])
@@ -83,7 +76,7 @@ async function runOptimization(forceExact: boolean) {
           timeWindows,
           balanceLoad,
           maxDuration: maxDuration[0],
-          objective,
+          objective: "distance",
           customer_ids: allSelected ? undefined : Array.from(selectedCustomerIds),
         }),
       },
@@ -225,30 +218,6 @@ const allCustomersSelected = customers.length > 0 && selectedCustomerIds.size ==
                 </div>
               </div>
             </Card>
-
-            {/* Objective */}
-            <Card className="gap-4 p-6">
-              <h2 className="text-sm font-semibold text-foreground">Optimization Objective</h2>
-              <div className="grid gap-3 sm:grid-cols-3">
-                {objectives.map((o) => {
-                  const active = objective === o.id
-                  return (
-                    <button
-                      key={o.id}
-                      onClick={() => setObjective(o.id)}
-                      className={`rounded-lg border p-4 text-left transition-colors ${
-                        active
-                          ? "border-primary bg-primary/5 ring-1 ring-primary"
-                          : "border-border hover:border-primary/40 hover:bg-accent/40"
-                      }`}
-                    >
-                      <p className="text-sm font-medium text-foreground">{o.label}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">{o.desc}</p>
-                    </button>
-                  )
-                })}
-              </div>
-            </Card>
           </div>
 
           {/* Summary + run */}
@@ -271,7 +240,7 @@ const allCustomersSelected = customers.length > 0 && selectedCustomerIds.size ==
               </div>
               <Separator />
               <div className="space-y-2 text-xs text-muted-foreground">
-                <p>Objective: <span className="font-medium text-foreground capitalize">{objective}</span></p>
+                <p>Objective: <span className="font-medium text-foreground">Minimize distance</span></p>
                 <p>Time windows: <span className="font-medium text-foreground">{timeWindows ? "On" : "Off"}</span></p>
                 <p>Return to depot: <span className="font-medium text-foreground">{returnToDepot ? "On" : "Off"}</span></p>
               </div>

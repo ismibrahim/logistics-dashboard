@@ -1,12 +1,11 @@
 "use client"
 
-import { Users, Truck, Warehouse, Route as RouteIcon, Gauge, CheckCircle2, Clock, MapPin } from "lucide-react"
+import { Users, Truck, Warehouse, Route as RouteIcon, Gauge, CheckCircle2 } from "lucide-react"
 import { AppShell } from "@/components/app-shell"
 import { Topbar } from "@/components/topbar"
 import { PageHeader } from "@/components/page-header"
 import { KpiCard } from "@/components/kpi-card"
 import { MapPanel } from "@/components/map-panel"
-import { TechnologyCards } from "@/components/technology-cards"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
@@ -162,8 +161,6 @@ const avgUtilization =
 
 </div>
 </div>
-
-<TechnologyCards />
 
 </div>
 </AppShell>
