@@ -459,6 +459,57 @@ const totalCost =
           <KpiCard label="Avg. Load" value={hasResult ? avgLoad : "–"} unit="%" icon={Gauge} />
         </div>
 
+        {/* Plausibilitätsprüfung */}
+        {solverResult?.validation && (() => {
+          // Kein Solver-Ergebnis (z.B. exakter Solver lief ins Zeitlimit ohne
+          // zulässige Lösung, distance===null) -> alle Kunden erscheinen als
+          // "fehlend", was technisch korrekt aber als rotes FAIL irrefuehrend
+          // waere (sieht nach Bug aus statt nach erwarteter Skalierungsgrenze).
+          // Solche Faelle neutral als "nicht anwendbar" statt FAIL anzeigen.
+          const notApplicable = solverResult.distance == null
+          const passed = solverResult.validation.passed
+
+          return (
+            <Card className="gap-3 p-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-semibold text-foreground">Plausibilitätsprüfung</h2>
+                  <p className="text-xs text-muted-foreground">
+                    Kunden, Kapazität, Depot-Start/Ende, Gesamtnachfrage vs. Gesamtkapazität
+                  </p>
+                </div>
+                <Badge
+                  variant={notApplicable ? "outline" : passed ? "secondary" : "destructive"}
+                  className="gap-1.5"
+                >
+                  {notApplicable ? (
+                    <AlertTriangle className="size-3.5" />
+                  ) : passed ? (
+                    <CheckCircle2 className="size-3.5" />
+                  ) : (
+                    <AlertTriangle className="size-3.5" />
+                  )}
+                  {notApplicable ? "Nicht anwendbar" : passed ? "PASS" : "FAIL"}
+                </Badge>
+              </div>
+              {notApplicable && (
+                <p className="text-xs text-muted-foreground">
+                  Solver fand keine zulässige Lösung (Status: {solverResult.status}) – keine Routen zu prüfen.
+                </p>
+              )}
+              {!notApplicable && !passed && (
+                <ul className="space-y-1 text-xs text-destructive">
+                  {Object.entries(solverResult.validation.checks ?? {})
+                    .filter(([, check]: [string, any]) => !check.passed)
+                    .map(([name]) => (
+                      <li key={name}>• {name}</li>
+                    ))}
+                </ul>
+              )}
+            </Card>
+          )
+        })()}
+
         {/* Map: realer /optimize-Lauf (Multi-Depot, alle Constraints) */}
         <Card className="overflow-hidden p-0">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
