@@ -2,7 +2,7 @@
 
 
 import { Download, Route as RouteIcon, Clock, Euro, Gauge, CheckCircle2, Timer, Truck, Users, Warehouse, Loader2, Scale, AlertTriangle, Cpu, Zap, RefreshCw, ChevronRight } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { AppShell } from "@/components/app-shell"
 import { Topbar } from "@/components/topbar"
 import { PageHeader } from "@/components/page-header"
@@ -11,6 +11,7 @@ import { KpiCard } from "@/components/kpi-card"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Switch } from "@/components/ui/switch"
 
 
 
@@ -73,16 +74,80 @@ function buildRouteDetails(result: any, vehicles: any[], customers: any[], depot
   })
 }
 
+// Wie lange CBC ueber das gewaehlte timeLimitSeconds hinaus noch fuer
+// Modellaufbau/Routenextraktion braucht, bevor die Antwort beim Client
+// ankommt - der client-seitige fetch-Timeout muss das einrechnen, sonst
+// bricht der Browser die Verbindung vor dem Solver ab (siehe runExactSolver).
+const EXACT_SOLVER_TIMEOUT_BUFFER_MS = 60_000
+
 export default function ResultsPage() {
   const [solverResult, setSolverResult] = useState<any>(null)
+  const [lastOptimizeRequest, setLastOptimizeRequest] = useState<any>(null)
+  const [exactRunning, setExactRunning] = useState(false)
+  const [exactError, setExactError] = useState<string | null>(null)
 
   useEffect(() => {
     const data = localStorage.getItem("solverResult")
-
     if (data) {
       setSolverResult(JSON.parse(data))
     }
+
+    const lastRequest = localStorage.getItem("lastOptimizeRequest")
+    if (lastRequest) {
+      setLastOptimizeRequest(JSON.parse(lastRequest))
+    }
   }, [])
+
+  // Startet den exakten MILP-Solver als separaten, bewussten Schritt mit
+  // denselben Auswahl-/Constraint-Parametern wie der vorausgegangene
+  // Heuristik-Lauf (lastOptimizeRequest, von der Optimization-Seite
+  // gespeichert). Synchroner Request wie /optimize generell - kein
+  // Async/Polling -, daher bleibt solverResult (Heuristik) waehrend des
+  // Laufs unveraendert sichtbar und wird erst bei Erfolg ersetzt.
+  async function runExactSolver() {
+    if (!lastOptimizeRequest) return
+
+    setExactRunning(true)
+    setExactError(null)
+
+    const timeLimitSeconds = lastOptimizeRequest.timeLimitSeconds ?? 60
+    const controller = new AbortController()
+    // Client-Timeout muss ueber dem Solver-Zeitlimit liegen (sonst killt der
+    // Browser den fetch, bevor CBC selbst abbricht und antwortet) - Zeitlimit
+    // + fester Puffer fuer Modellaufbau, Routenextraktion und Netzwerk.
+    const timeoutMs = timeLimitSeconds * 1000 + EXACT_SOLVER_TIMEOUT_BUFFER_MS
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+
+    try {
+      const response = await fetch("http://127.0.0.1:8000/optimize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...lastOptimizeRequest, method: "exact" }),
+        signal: controller.signal,
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        setExactError(data?.detail ?? `Exakter Solver fehlgeschlagen (HTTP ${response.status})`)
+        return
+      }
+
+      setSolverResult(data)
+      localStorage.setItem("solverResult", JSON.stringify(data))
+    } catch (error: any) {
+      console.error(error)
+      setExactError(
+        error?.name === "AbortError"
+          ? `Keine Antwort innerhalb von Zeitlimit + Puffer (${Math.round(timeoutMs / 1000)}s). ` +
+            "Der Solver läuft im Backend ggf. noch weiter, die Verbindung wurde clientseitig beendet."
+          : "Backend nicht erreichbar",
+      )
+    } finally {
+      clearTimeout(timeoutId)
+      setExactRunning(false)
+    }
+  }
 
   const [vehicles, setVehicles] = useState<any[]>([])
   const [customers, setCustomers] = useState<any[]>([])
@@ -91,6 +156,23 @@ export default function ResultsPage() {
   const [compareData, setCompareData] = useState<any>(null)
   const [compareLoading, setCompareLoading] = useState(false)
   const [compareError, setCompareError] = useState<string | null>(null)
+  // Sequenz-Guard: /compare kann bis zu COMPARE_TIME_LIMIT_S (300s) dauern -
+  // ueberlappende Aufrufe (z.B. initialer Load + spaeterer "Erneut
+  // vergleichen"-Klick) koennen daher in beliebiger Reihenfolge antworten.
+  // Nur die Antwort des zuletzt GESTARTETEN Calls darf den State setzen,
+  // sonst kann eine aeltere, aber langsamere Antwort eine bereits aktuellere
+  // ueberschreiben (siehe Diagnose: gerenderte "Render-Reste" eines frueheren
+  // Laufs trotz fehlgeschlagenem neuem Compare-Versuch).
+  const compareRequestIdRef = useRef(0)
+  const compareAbortRef = useRef<AbortController | null>(null)
+  // /compare soll automatisch nur EINMAL pro Results-Besuch laufen (beim
+  // ersten eintreffenden solverResult, typischerweise die Heuristik) - nicht
+  // erneut bei jedem spaeteren solverResult-Wechsel (z.B. nach
+  // runExactSolver()). Sonst wuerde jeder "Run Exact Solver"-Klick
+  // unaufgefordert einen weiteren bis zu 300s langen Compare-Call ausloesen.
+  // Manuelles Neu-Vergleichen bleibt ueber den "Erneut vergleichen"-Button
+  // jederzeit moeglich.
+  const hasAutoComparedRef = useRef(false)
 
   // Kunden-IDs fuer den Benchmark aus den Koordinaten des /optimize-Laufs
   // ableiten (Depot-Knoten sind >= 1000, siehe cvrp_solver.DEPOT_NODE_BASE) -
@@ -102,29 +184,64 @@ export default function ResultsPage() {
         .filter((id) => id < 1000)
     : []
 
+  // Welche Kunden tatsaechlich Teil des aktuellen /optimize-Laufs sind, steckt
+  // ausschliesslich im coordinates-Key (siehe customerIdsForCompare oben) -
+  // beide Seiten werden ueber Number() verglichen, da customer_id ueber
+  // JSON-Roundtrips theoretisch als String ankommen koennte.
+  const routedCustomerIds = new Set(customerIdsForCompare.map(Number))
+  const hasRoutingInfo = customerIdsForCompare.length > 0
+  const [showUnroutedCustomers, setShowUnroutedCustomers] = useState(true)
+
   async function runCompare(customerIds: number[]) {
     if (customerIds.length === 0) return
 
+    // Eine evtl. noch laufende aeltere Anfrage abbrechen (bricht clientseitig
+    // die Verbindung ab; der Backend-Solver selbst laeuft synchron weiter,
+    // aber die veraltete Antwort wird dadurch schneller verworfen) und den
+    // Request-Zaehler erhoehen, bevor der neue fetch rausgeht.
+    compareAbortRef.current?.abort()
+    const controller = new AbortController()
+    compareAbortRef.current = controller
+    const requestId = ++compareRequestIdRef.current
+
+    // State sofort leeren, BEVOR der neue Call raus geht - waehrend der
+    // (bis zu 300s) Wartezeit soll kein alter Stand sichtbar bleiben, sondern
+    // ein klarer Lade-/Leerzustand (siehe Per-Karte-Platzhalter unten).
+    setCompareData(null)
     setCompareLoading(true)
     setCompareError(null)
 
     try {
       const query = customerIds.map((id) => `customer_ids=${id}`).join("&")
-      const response = await fetch(`http://127.0.0.1:8000/compare?${query}`)
+      const response = await fetch(`http://127.0.0.1:8000/compare?${query}`, {
+        signal: controller.signal,
+      })
       const data = await response.json()
+
+      if (requestId !== compareRequestIdRef.current) return // laengst ueberholt, verwerfen
+
       setCompareData(data)
-    } catch (error) {
-      console.error(error)
-      setCompareError("Backend nicht erreichbar")
+    } catch (error: any) {
+      if (requestId !== compareRequestIdRef.current) return
+      if (error?.name !== "AbortError") {
+        console.error(error)
+        setCompareError("Backend nicht erreichbar")
+      }
     } finally {
-      setCompareLoading(false)
+      if (requestId === compareRequestIdRef.current) {
+        setCompareLoading(false)
+      }
     }
   }
 
-  // Benchmark-Vergleich wird automatisch geladen, sobald der /optimize-Lauf
-  // (solverResult) vorliegt - auf denselben Kunden wie oben.
+  // Benchmark-Vergleich wird automatisch genau EINMAL pro Results-Besuch
+  // geladen, sobald der erste /optimize-Lauf (solverResult) vorliegt - nicht
+  // erneut bei jedem spaeteren solverResult-Wechsel (z.B. nach
+  // runExactSolver()). Erneuter Vergleich nur noch explizit ueber den
+  // "Erneut vergleichen"-Button.
   useEffect(() => {
-    if (customerIdsForCompare.length > 0) {
+    if (customerIdsForCompare.length > 0 && !hasAutoComparedRef.current) {
+      hasAutoComparedRef.current = true
       runCompare(customerIdsForCompare)
     }
   }, [solverResult])
@@ -167,9 +284,17 @@ useEffect(() => {
     lng: d.longitude,
   }))
 
+  // Toggle wirkt nur auf die Kunden-Marker; Depots bleiben immer sichtbar.
+  // Ohne eindeutige Routing-Info (hasRoutingInfo === false) immer alle zeigen,
+  // statt versehentlich alles auszublenden.
+  const visibleMapCustomers =
+    showUnroutedCustomers || !hasRoutingInfo
+      ? mapCustomers
+      : mapCustomers.filter((c: any) => routedCustomerIds.has(Number(c.customer_id)))
+
   const optimizationDetails = [
     { label: "Solver Status",value: solverResult?.status ?? "Loading",icon: CheckCircle2},
-    { label: "Solver Runtime", value: "3.1s", icon: Timer },
+    { label: "Solver Runtime", value: typeof solverResult?.runtime_s === "number" ? `${solverResult.runtime_s.toFixed(2)}s` : "–", icon: Timer },
     { label: "Vehicles Used", value: `${solverResult?.route_count ?? 0}`, icon: Truck },
     { label: "Customers Served",value: `${solverResult?.routes?.reduce((sum: number, [, route]: [number, number[]]) => sum + route.length - 2,0) ?? 0}`,icon: Users},
     { label: "Multi Depot Support", value: "Enabled", icon: Warehouse },
@@ -209,6 +334,11 @@ const estimatedTime = Math.round(
 
 const usedVehicles = solverResult?.route_count ?? 0
 
+const hasResult =
+  solverResult != null &&
+  typeof solverResult.distance === "number" &&
+  Array.isArray(solverResult.routes)
+
 
 
 const avgCostPerKm =
@@ -229,11 +359,19 @@ const totalCost =
     <AppShell>
       <Topbar />
       <PageHeader
-        title={solverResult?.distance? `Distance: ${solverResult.distance.toFixed(1)} km`: "Loading..."}
+        title={
+          solverResult == null
+            ? "Loading..."
+            : hasResult
+              ? `Distance: ${solverResult.distance.toFixed(1)} km`
+              : "No result available"
+        }
         description={
-          solverResult
-            ? `${solverResult.route_count} routes generated`
-            : "Loading..."
+          solverResult == null
+            ? "Loading..."
+            : hasResult
+              ? `${solverResult.route_count} routes generated`
+              : "Optimization did not produce a route plan"
         }
         actions={
           <div className="flex items-center gap-2">
@@ -250,6 +388,17 @@ const totalCost =
                 {solverResult.method_used === "exact" ? "Exakt" : "Heuristik"}
               </Badge>
             )}
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-2"
+              onClick={runExactSolver}
+              disabled={exactRunning || !lastOptimizeRequest}
+              title={!lastOptimizeRequest ? "Kein gespeicherter Optimierungs-Request gefunden" : undefined}
+            >
+              {exactRunning ? <Loader2 className="size-4 animate-spin" /> : <Cpu className="size-4" />}
+              {exactRunning ? "Exakter Solver läuft…" : "Run Exact Solver"}
+            </Button>
             <Button size="sm" variant="outline" className="gap-2">
               <Download className="size-4" /> Export
             </Button>
@@ -258,6 +407,24 @@ const totalCost =
       />
 
       <div className="flex-1 space-y-6 overflow-y-auto p-6">
+        {exactRunning && (
+          <div className="flex items-start gap-3 rounded-lg border border-blue-300 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-200">
+            <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin" />
+            <p>
+              Exakter Solver läuft noch… (Zeitlimit: {lastOptimizeRequest?.timeLimitSeconds ?? 60}s).
+              Kann je nach Instanzgröße und Zeitlimit deutlich länger dauern - das Heuristik-Ergebnis
+              unten bleibt bis dahin sichtbar und wird erst beim Eintreffen des exakten Ergebnisses ersetzt.
+            </p>
+          </div>
+        )}
+
+        {exactError && (
+          <div className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+            <p>Exakter Solver fehlgeschlagen: {exactError}</p>
+          </div>
+        )}
+
         {solverResult?.solved === false && (
           <div className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
@@ -286,10 +453,10 @@ const totalCost =
 
         {/* Stats */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <KpiCard label="Total Distance" value={solverResult?.distance?.toFixed(1) ?? "0"} unit="km" icon={RouteIcon}/>
-          <KpiCard label="Total Cost" value={totalCost} unit="€" icon={Euro} />
-          <KpiCard label="Total Time" value={estimatedTime} unit="h" icon={Clock} />
-          <KpiCard label="Avg. Load" value={avgLoad} unit="%" icon={Gauge} />
+          <KpiCard label="Total Distance" value={hasResult ? solverResult.distance.toFixed(1) : "–"} unit="km" icon={RouteIcon}/>
+          <KpiCard label="Total Cost" value={hasResult ? totalCost : "–"} unit="€" icon={Euro} />
+          <KpiCard label="Total Time" value={hasResult ? estimatedTime : "–"} unit="h" icon={Clock} />
+          <KpiCard label="Avg. Load" value={hasResult ? avgLoad : "–"} unit="%" icon={Gauge} />
         </div>
 
         {/* Map: realer /optimize-Lauf (Multi-Depot, alle Constraints) */}
@@ -299,19 +466,29 @@ const totalCost =
               <h2 className="text-sm font-semibold text-foreground">Optimization Result</h2>
               <p className="text-xs text-muted-foreground">Color-coded route paths across the network</p>
             </div>
-            <div className="flex flex-wrap items-center gap-3 text-xs">
-              {solverRoutes.map((r:any) => (
-                <span key={r.id} className="flex items-center gap-1.5 text-muted-foreground">
-                  <span className="h-1 w-4 rounded-full" style={{ backgroundColor: r.color }} />
-                  {r.vehicle}
-                </span>
-              ))}
+            <div className="flex flex-wrap items-center gap-4 text-xs">
+              <div className="flex flex-wrap items-center gap-3">
+                {solverRoutes.map((r:any) => (
+                  <span key={r.id} className="flex items-center gap-1.5 text-muted-foreground">
+                    <span className="h-1 w-4 rounded-full" style={{ backgroundColor: r.color }} />
+                    {r.vehicle}
+                  </span>
+                ))}
+              </div>
+              <label className="flex items-center gap-2 text-muted-foreground" title="Kunden, die in keiner Route dieses Laufs vorkommen, ein- oder ausblenden">
+                <Switch
+                  checked={showUnroutedCustomers}
+                  onCheckedChange={setShowUnroutedCustomers}
+                  disabled={!hasRoutingInfo}
+                />
+                Nicht beroutete Kunden anzeigen
+              </label>
             </div>
           </div>
           <MapPanel
             className="h-[440px] rounded-none border-0"
             routes={solverRoutes}
-            customers={mapCustomers}
+            customers={visibleMapCustomers}
             depots={mapDepots}
           />
           <p className="border-t border-border px-5 py-3 text-xs leading-relaxed text-muted-foreground">
@@ -359,12 +536,18 @@ const totalCost =
                   <Cpu className="size-3.5" /> Exact Solver (MILP)
                 </span>
               </div>
-              <MapPanel
-                className="h-[360px] rounded-none border-0"
-                routes={exactCompareRoutes}
-                customers={mapCustomers}
-                depots={mapDepots}
-              />
+              {compareData?.exact ? (
+                <MapPanel
+                  className="h-[360px] rounded-none border-0"
+                  routes={exactCompareRoutes}
+                  customers={mapCustomers}
+                  depots={mapDepots}
+                />
+              ) : (
+                <div className="flex h-[360px] items-center justify-center px-6 text-center text-sm text-muted-foreground">
+                  {compareLoading ? "Vergleiche…" : "Kein Ergebnis (exakter Solver hat keine Lösung gefunden)."}
+                </div>
+              )}
             </Card>
             <Card className="overflow-hidden p-0">
               <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
@@ -372,12 +555,18 @@ const totalCost =
                   <Zap className="size-3.5" /> Nearest Neighbor (Heuristik)
                 </span>
               </div>
-              <MapPanel
-                className="h-[360px] rounded-none border-0"
-                routes={heuristicCompareRoutes}
-                customers={mapCustomers}
-                depots={mapDepots}
-              />
+              {compareData?.heuristic ? (
+                <MapPanel
+                  className="h-[360px] rounded-none border-0"
+                  routes={heuristicCompareRoutes}
+                  customers={mapCustomers}
+                  depots={mapDepots}
+                />
+              ) : (
+                <div className="flex h-[360px] items-center justify-center px-6 text-center text-sm text-muted-foreground">
+                  {compareLoading ? "Vergleiche…" : "Kein Ergebnis."}
+                </div>
+              )}
             </Card>
           </div>
 
