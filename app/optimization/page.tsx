@@ -101,6 +101,9 @@ const running = runningMode !== null
 const largeInstance = selectedCustomerIds.size > 50
 const noCustomersSelected = selectedCustomerIds.size === 0
 const allCustomersSelected = customers.length > 0 && selectedCustomerIds.size === customers.length
+const selectedDemand = customers
+  .filter((c: any) => selectedCustomerIds.has(c.customer_id))
+  .reduce((sum: number, c: any) => sum + c.demand, 0)
 
   const hours = Math.floor(maxDuration[0] / 60)
   const mins = maxDuration[0] % 60
@@ -236,6 +239,14 @@ const allCustomersSelected = customers.length > 0 && selectedCustomerIds.size ==
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-2 text-muted-foreground"><Warehouse className="size-4" />Depots</span>
                   <span className="font-medium text-foreground">{depots.length}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Selected</span>
+                  <span className="font-medium text-foreground">{selectedCustomerIds.size} Kunden</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Total demand</span>
+                  <span className="font-medium text-foreground">{selectedDemand} units</span>
                 </div>
               </div>
               <Separator />

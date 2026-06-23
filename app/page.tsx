@@ -109,8 +109,7 @@ const avgUtilization =
               </div>
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-[#1e3a8a]" />Depot</span>
-                <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-primary" />High</span>
-                <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-[#0891b2]" />Medium</span>
+                <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-[#6b7280]" />Customer</span>
               </div>
             </div>
             <MapPanel
