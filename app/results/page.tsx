@@ -557,6 +557,12 @@ const totalCost =
                 Vereinfachter Vergleich auf Einzeldepot-Basis ohne Zeitfenster — Routen können daher von der
                 Multi-Depot-Optimierung oben abweichen. Aussagekräftig ist der direkte Distanz-/Kosten-Vergleich.
               </p>
+              <p
+                className="mt-1 text-xs text-muted-foreground"
+                title="Dieser Vergleich nutzt ein eigenes, festes Zeitlimit für den exakten Solver - unabhängig vom Zeitlimit-Feld auf der Optimization-Seite."
+              >
+                Zeitlimit (exakter Solver): <span className="font-medium text-foreground">300s, fest</span>
+              </p>
             </div>
             <Button
               size="sm"
