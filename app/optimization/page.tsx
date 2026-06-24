@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation"
 import { useState, useEffect } from "react"
-import { Clock, RotateCcw, Timer, Play, Loader2, Settings2, Users, Truck, Warehouse, Zap, AlertTriangle } from "lucide-react"
+import { Clock, RotateCcw, Timer, Play, Loader2, Settings2, Users, Truck, Warehouse, AlertTriangle } from "lucide-react"
 import { AppShell } from "@/components/app-shell"
 import { Topbar } from "@/components/topbar"
 import { PageHeader } from "@/components/page-header"
@@ -19,11 +19,15 @@ export default function OptimizationPage() {
   const [returnToDepot, setReturnToDepot] = useState(true)
   const [balanceLoad, setBalanceLoad] = useState(false)
   const [maxDuration, setMaxDuration] = useState([99999])
-  const [runningMode, setRunningMode] = useState<"auto" | "exact" | null>(null)
+  const [timeLimitSeconds, setTimeLimitSeconds] = useState(60)
+  const [running, setRunning] = useState(false)
   const [customers, setCustomers] = useState([])
   const [vehicles, setVehicles] = useState([])
   const [depots, setDepots] = useState([])
   const [selectedCustomerIds, setSelectedCustomerIds] = useState<Set<number>>(new Set())
+  const [selectedDepotIds, setSelectedDepotIds] = useState<Set<number>>(new Set())
+  const [selectedVehicleIds, setSelectedVehicleIds] = useState<Set<number>>(new Set())
+  const [optimizeError, setOptimizeError] = useState<string | null>(null)
 
 useEffect(() => {
   fetch("http://127.0.0.1:8000/customers")
@@ -35,11 +39,17 @@ useEffect(() => {
 
   fetch("http://127.0.0.1:8000/vehicles")
     .then(res => res.json())
-    .then(data => setVehicles(data))
+    .then(data => {
+      setVehicles(data)
+      setSelectedVehicleIds(new Set(data.map((v: any) => v.vehicle_id)))
+    })
 
   fetch("http://127.0.0.1:8000/depots")
     .then(res => res.json())
-    .then(data => setDepots(data))
+    .then(data => {
+      setDepots(data)
+      setSelectedDepotIds(new Set(data.map((d: any) => d.depot_id)))
+    })
 }, [])
 
 function toggleCustomer(id: number, checked: boolean) {
@@ -59,48 +69,107 @@ function toggleAllCustomers() {
   )
 }
 
-async function runOptimization(forceExact: boolean) {
-  setRunningMode(forceExact ? "exact" : "auto")
+function toggleDepot(id: number, checked: boolean) {
+  setSelectedDepotIds((prev) => {
+    const next = new Set(prev)
+    if (checked) next.add(id)
+    else next.delete(id)
+    return next
+  })
+}
+
+function toggleAllDepots() {
+  setSelectedDepotIds((prev) =>
+    prev.size === depots.length
+      ? new Set()
+      : new Set(depots.map((d: any) => d.depot_id)),
+  )
+}
+
+function toggleVehicle(id: number, checked: boolean) {
+  setSelectedVehicleIds((prev) => {
+    const next = new Set(prev)
+    if (checked) next.add(id)
+    else next.delete(id)
+    return next
+  })
+}
+
+function toggleAllVehicles() {
+  setSelectedVehicleIds((prev) =>
+    prev.size === vehicles.length
+      ? new Set()
+      : new Set(vehicles.map((v: any) => v.vehicle_id)),
+  )
+}
+
+// Heuristik laeuft immer als erster, garantierter Schritt (Nearest Neighbor,
+// unabhaengig von der Kundenzahl - kein automatischer Threshold mehr). Der
+// exakte MILP-Solver ist ein separater, bewusster Schritt und wird erst auf
+// der Results-Seite per "Run Exact Solver" gestartet (dort bleibt das
+// Heuristik-Ergebnis waehrend des exakten Laufs sichtbar). Die hier
+// verwendeten Request-Parameter werden mitgespeichert, damit die
+// Results-Seite denselben Request mit method="exact" wiederholen kann.
+async function runHeuristic() {
+  setRunning(true)
+  setOptimizeError(null)
 
   try {
     const allSelected = selectedCustomerIds.size === customers.length
-    const response = await fetch(
-      `http://127.0.0.1:8000/optimize?force_exact=${forceExact}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          returnToDepot,
-          timeWindows,
-          balanceLoad,
-          maxDuration: maxDuration[0],
-          objective: "distance",
-          customer_ids: allSelected ? undefined : Array.from(selectedCustomerIds),
-        }),
+    const requestBody = {
+      returnToDepot,
+      timeWindows,
+      balanceLoad,
+      maxDuration: maxDuration[0],
+      timeLimitSeconds,
+      objective: "distance",
+      customer_ids: allSelected ? undefined : Array.from(selectedCustomerIds),
+      depot_ids: selectedDepotIds.size === depots.length ? undefined : Array.from(selectedDepotIds),
+      vehicle_ids: selectedVehicleIds.size === vehicles.length ? undefined : Array.from(selectedVehicleIds),
+    }
+
+    const response = await fetch("http://127.0.0.1:8000/optimize", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
       },
-    )
+      body: JSON.stringify({ ...requestBody, method: "heuristic" }),
+    })
 
     const data = await response.json()
 
     console.log("RESPONSE STATUS:", response.status)
     console.log("SOLVER DATA:", data)
 
+    if (!response.ok) {
+      // Request konnte nicht einmal an den Solver uebergeben werden (z.B.
+      // Konfigurationsfehler wie ein Fahrzeug ohne Depot-Zuordnung) - kein
+      // Navigieren zu /results mit einem kaputten Objekt, Fehler bleibt hier
+      // sichtbar.
+      setOptimizeError(data?.detail ?? `Optimierung fehlgeschlagen (HTTP ${response.status})`)
+      return
+    }
+
     localStorage.setItem("solverResult", JSON.stringify(data))
+    // requestBody (ohne method) wird separat gespeichert, damit die
+    // Results-Seite denselben Request spaeter mit method="exact" erneut
+    // schicken kann, ohne die Auswahl auf der Optimization-Seite zu kennen.
+    localStorage.setItem("lastOptimizeRequest", JSON.stringify(requestBody))
     router.push("/results")
   } catch (error) {
     console.error(error)
     alert("Backend nicht erreichbar")
   } finally {
-    setRunningMode(null)
+    setRunning(false)
   }
 }
 
-const running = runningMode !== null
-const largeInstance = selectedCustomerIds.size > 50
 const noCustomersSelected = selectedCustomerIds.size === 0
 const allCustomersSelected = customers.length > 0 && selectedCustomerIds.size === customers.length
+const noDepotsSelected = selectedDepotIds.size === 0
+const allDepotsSelected = depots.length > 0 && selectedDepotIds.size === depots.length
+const noVehiclesSelected = selectedVehicleIds.size === 0
+const allVehiclesSelected = vehicles.length > 0 && selectedVehicleIds.size === vehicles.length
 const selectedDemand = customers
   .filter((c: any) => selectedCustomerIds.has(c.customer_id))
   .reduce((sum: number, c: any) => sum + c.demand, 0)
@@ -117,6 +186,12 @@ const selectedDemand = customers
       />
 
       <div className="flex-1 overflow-y-auto p-6">
+        {optimizeError && (
+          <div className="mb-6 flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+            <p>Optimierung konnte nicht gestartet werden: {optimizeError}</p>
+          </div>
+        )}
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="space-y-6 lg:col-span-2">
             {/* Customer selection */}
@@ -151,6 +226,78 @@ const selectedDemand = customers
                 <p className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-500">
                   <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
                   Mindestens einen Kunden auswählen.
+                </p>
+              )}
+            </Card>
+
+            {/* Depot selection */}
+            <Card className="gap-4 p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Warehouse className="size-4 text-primary" />
+                  <h2 className="text-sm font-semibold text-foreground">Depots</h2>
+                </div>
+                <Button variant="ghost" size="sm" onClick={toggleAllDepots}>
+                  {allDepotsSelected ? "Deselect all" : "Select all"}
+                </Button>
+              </div>
+              <Separator />
+              <div className="max-h-64 space-y-1 overflow-y-auto pr-1">
+                {depots.map((d: any) => (
+                  <label
+                    key={d.depot_id}
+                    className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent/40"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedDepotIds.has(d.depot_id)}
+                      onChange={(e) => toggleDepot(d.depot_id, e.target.checked)}
+                    />
+                    <span className="text-foreground">{d.name}</span>
+                    <span className="text-xs text-muted-foreground">#{d.depot_id}</span>
+                  </label>
+                ))}
+              </div>
+              {noDepotsSelected && (
+                <p className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-500">
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                  Mindestens ein Depot auswählen.
+                </p>
+              )}
+            </Card>
+
+            {/* Vehicle selection */}
+            <Card className="gap-4 p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Truck className="size-4 text-primary" />
+                  <h2 className="text-sm font-semibold text-foreground">Vehicles</h2>
+                </div>
+                <Button variant="ghost" size="sm" onClick={toggleAllVehicles}>
+                  {allVehiclesSelected ? "Deselect all" : "Select all"}
+                </Button>
+              </div>
+              <Separator />
+              <div className="max-h-64 space-y-1 overflow-y-auto pr-1">
+                {vehicles.map((v: any) => (
+                  <label
+                    key={v.vehicle_id}
+                    className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent/40"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedVehicleIds.has(v.vehicle_id)}
+                      onChange={(e) => toggleVehicle(v.vehicle_id, e.target.checked)}
+                    />
+                    <span className="text-foreground">{v.license_plate}</span>
+                    <span className="text-xs text-muted-foreground">#{v.vehicle_id}</span>
+                  </label>
+                ))}
+              </div>
+              {noVehiclesSelected && (
+                <p className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-500">
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                  Mindestens ein Fahrzeug auswählen.
                 </p>
               )}
             </Card>
@@ -234,11 +381,11 @@ const selectedDemand = customers
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-2 text-muted-foreground"><Truck className="size-4" />Vehicles</span>
-                  <span className="font-medium text-foreground">{vehicles.length}</span>
+                  <span className="font-medium text-foreground">{selectedVehicleIds.size} / {vehicles.length}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-2 text-muted-foreground"><Warehouse className="size-4" />Depots</span>
-                  <span className="font-medium text-foreground">{depots.length}</span>
+                  <span className="font-medium text-foreground">{selectedDepotIds.size} / {depots.length}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Selected</span>
@@ -254,48 +401,49 @@ const selectedDemand = customers
                 <p>Objective: <span className="font-medium text-foreground">Minimize distance</span></p>
                 <p>Time windows: <span className="font-medium text-foreground">{timeWindows ? "On" : "Off"}</span></p>
                 <p>Return to depot: <span className="font-medium text-foreground">{returnToDepot ? "On" : "Off"}</span></p>
+                <div className="flex items-center justify-between pt-1">
+                  <label htmlFor="time-limit-seconds" className="flex items-center gap-1.5">
+                    <Timer className="size-3.5" />
+                    Zeitlimit (Sekunden)
+                  </label>
+                  <input
+                    id="time-limit-seconds"
+                    type="number"
+                    min={5}
+                    max={3600}
+                    value={timeLimitSeconds}
+                    onChange={(e) => setTimeLimitSeconds(Number(e.target.value))}
+                    className="w-16 rounded-md border border-input bg-background px-2 py-1 text-right text-xs text-foreground"
+                  />
+                </div>
+                <p className="text-[11px] italic text-muted-foreground/80">
+                  Nur relevant für den optionalen exakten Solver (Run Exact Solver auf der
+                  Ergebnis-Seite). Standard: 60s, max. 1h. Der separate "Solver vs. Heuristic
+                  Benchmark"-Block auf der Ergebnis-Seite nutzt ein eigenes, festes Zeitlimit
+                  (300s) und wird von diesem Feld nicht beeinflusst.
+                </p>
               </div>
             </Card>
 
             <Button
               size="lg"
               className="w-full gap-2"
-              onClick={() => runOptimization(false)}
+              onClick={() => runHeuristic()}
               disabled={running || noCustomersSelected}
             >
-              {runningMode === "auto" ? (
+              {running ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : (
                 <Play className="size-4" />
               )}
-              {runningMode === "auto" ? "Optimizing routes…" : "Start Optimization"}
+              {running ? "Optimizing routes…" : "Start Optimization"}
             </Button>
             <p className="text-center text-xs text-muted-foreground">
-              Uses the exact solver for small instances and automatically switches to a fast
-              heuristic above 50 customers.
+              Berechnet sofort eine schnelle heuristische Lösung (Nearest Neighbor) -
+              unabhängig von der Instanzgröße. Den optionalen exakten Solver kannst du
+              danach auf der Ergebnis-Seite gezielt dazu starten (kann je nach Größe und
+              Zeitlimit deutlich länger dauern).
             </p>
-
-            <Button
-              size="lg"
-              variant="outline"
-              className="w-full gap-2"
-              onClick={() => runOptimization(true)}
-              disabled={running || noCustomersSelected}
-            >
-              {runningMode === "exact" ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Zap className="size-4" />
-              )}
-              {runningMode === "exact" ? "Running exact solver…" : "Run Exact Solver"}
-            </Button>
-            {largeInstance && (
-              <p className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-500">
-                <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                Achtung: Kann bei dieser Instanzgröße (&gt;50 Kunden) sehr lange dauern oder am
-                Zeitlimit (60s) abbrechen.
-              </p>
-            )}
           </div>
         </div>
       </div>

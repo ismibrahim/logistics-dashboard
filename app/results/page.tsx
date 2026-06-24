@@ -212,8 +212,15 @@ export default function ResultsPage() {
     setCompareError(null)
 
     try {
-      const query = customerIds.map((id) => `customer_ids=${id}`).join("&")
-      const response = await fetch(`http://127.0.0.1:8000/compare?${query}`, {
+      const params = new URLSearchParams()
+      customerIds.forEach((id) => params.append("customer_ids", String(id)))
+      ;(lastOptimizeRequest?.depot_ids ?? []).forEach((id: number) =>
+        params.append("depot_ids", String(id))
+      )
+      ;(lastOptimizeRequest?.vehicle_ids ?? []).forEach((id: number) =>
+        params.append("vehicle_ids", String(id))
+      )
+      const response = await fetch(`http://127.0.0.1:8000/compare?${params.toString()}`, {
         signal: controller.signal,
       })
       const data = await response.json()
@@ -283,6 +290,27 @@ useEffect(() => {
     lat: d.latitude,
     lng: d.longitude,
   }))
+
+  // /compare nutzt seit dem Multi-Depot-Fix dieselben Depots/Fahrzeuge wie
+  // /optimize - "coordinates" im Backend-Ergebnis enthaelt aber immer ALLE
+  // Depots (solve_cvrp()/nearest_neighbor_mdvrp() laden depots.csv intern
+  // ungefiltert, siehe notes/known_issues.md Punkt 3), nicht nur die
+  // tatsaechlich genutzten. Die Marker auf den Compare-Karten sollen daher
+  // nur die Depots zeigen, die in den jeweiligen "routes" auch wirklich
+  // vorkommen (Knoten-ID >= 1000, siehe DEPOT_NODE_BASE) - sonst wirkt ein
+  // geografisch nahes, aber ungenutztes Depot wie ein falscher Routenstart
+  // (siehe Diagnose Bug 2).
+  function depotsUsedInRoutes(result: any): any[] {
+    const usedDepotIds = new Set<number>(
+      (result?.routes ?? []).flatMap(([, route]: [number, number[]]) =>
+        route.filter((nodeId) => nodeId >= 1000).map((nodeId) => nodeId - 1000)
+      )
+    )
+    return mapDepots.filter((d: any) => usedDepotIds.has(Number(d.id)))
+  }
+
+  const exactCompareDepot = depotsUsedInRoutes(compareData?.exact)
+  const heuristicCompareDepot = depotsUsedInRoutes(compareData?.heuristic)
 
   // Toggle wirkt nur auf die Kunden-Marker; Depots bleiben immer sichtbar.
   // Ohne eindeutige Routing-Info (hasRoutingInfo === false) immer alle zeigen,
@@ -557,6 +585,12 @@ const totalCost =
                 Vereinfachter Vergleich auf Einzeldepot-Basis ohne Zeitfenster — Routen können daher von der
                 Multi-Depot-Optimierung oben abweichen. Aussagekräftig ist der direkte Distanz-/Kosten-Vergleich.
               </p>
+              <p
+                className="mt-1 text-xs text-muted-foreground"
+                title="Dieser Vergleich nutzt ein eigenes, festes Zeitlimit für den exakten Solver - unabhängig vom Zeitlimit-Feld auf der Optimization-Seite."
+              >
+                Zeitlimit (exakter Solver): <span className="font-medium text-foreground">300s, fest</span>
+              </p>
             </div>
             <Button
               size="sm"
@@ -592,7 +626,7 @@ const totalCost =
                   className="h-[360px] rounded-none border-0"
                   routes={exactCompareRoutes}
                   customers={mapCustomers}
-                  depots={mapDepots}
+                  depots={exactCompareDepot}
                 />
               ) : (
                 <div className="flex h-[360px] items-center justify-center px-6 text-center text-sm text-muted-foreground">
@@ -611,7 +645,7 @@ const totalCost =
                   className="h-[360px] rounded-none border-0"
                   routes={heuristicCompareRoutes}
                   customers={mapCustomers}
-                  depots={mapDepots}
+                  depots={heuristicCompareDepot}
                 />
               ) : (
                 <div className="flex h-[360px] items-center justify-center px-6 text-center text-sm text-muted-foreground">
