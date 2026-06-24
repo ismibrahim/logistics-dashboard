@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import {
   MapContainer,
   TileLayer,
@@ -12,6 +12,17 @@ import {
 } from "react-leaflet"
 import "leaflet/dist/leaflet.css"
 import type { Customer, Depot, OptimizedRoute } from "@/lib/data"
+import L from "leaflet"
+
+// Leaflet-Icon-Fix für SSR/Webpack
+if (typeof window !== "undefined") {
+  delete (L.Icon.Default.prototype as any)._getIconUrl
+  L.Icon.Default.mergeOptions({
+    iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png",
+    iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png",
+    shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
+  })
+}
 
 type LogisticsMapProps = {
   customers?: Customer[]
@@ -38,6 +49,20 @@ export default function LogisticsMap({
   center = [48.15, 11.58],
   zoom = 12,
 }: LogisticsMapProps) {
+  const [isClient, setIsClient] = useState(false)
+
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
+
+  if (!isClient) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-accent/40">
+        <span className="text-sm text-muted-foreground">Loading map…</span>
+      </div>
+    )
+  }
+
   const allPoints: [number, number][] = [
     ...depots.map((d) => [d.lat, d.lng] as [number, number]),
     ...customers.map((c) => [c.lat, c.lng] as [number, number]),
