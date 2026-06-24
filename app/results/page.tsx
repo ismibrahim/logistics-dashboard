@@ -284,6 +284,16 @@ useEffect(() => {
     lng: d.longitude,
   }))
 
+  // /compare reduziert backend-seitig immer auf das erste Depot
+  // (depots_df.iloc[0], siehe src/nearest_neighbor.py "erstes_depot_id") -
+  // die beiden Compare-Karten sollen deshalb auch nur dieses eine Depot als
+  // Marker zeigen statt der vollen mapDepots-Liste. Sonst wirkt ein
+  // geografisch nahes, aber ungenutztes Depot wie der (falsche) Routenstart,
+  // waehrend die Route tatsaechlich zum ersten Depot verbindet (siehe
+  // Diagnose Bug 2). Reihenfolge von mapDepots entspricht der CSV-/API-
+  // Reihenfolge von depots.csv, also exakt depots_df.iloc[0].
+  const compareDepot = mapDepots.length > 0 ? [mapDepots[0]] : []
+
   // Toggle wirkt nur auf die Kunden-Marker; Depots bleiben immer sichtbar.
   // Ohne eindeutige Routing-Info (hasRoutingInfo === false) immer alle zeigen,
   // statt versehentlich alles auszublenden.
@@ -598,7 +608,7 @@ const totalCost =
                   className="h-[360px] rounded-none border-0"
                   routes={exactCompareRoutes}
                   customers={mapCustomers}
-                  depots={mapDepots}
+                  depots={compareDepot}
                 />
               ) : (
                 <div className="flex h-[360px] items-center justify-center px-6 text-center text-sm text-muted-foreground">
@@ -617,7 +627,7 @@ const totalCost =
                   className="h-[360px] rounded-none border-0"
                   routes={heuristicCompareRoutes}
                   customers={mapCustomers}
-                  depots={mapDepots}
+                  depots={compareDepot}
                 />
               ) : (
                 <div className="flex h-[360px] items-center justify-center px-6 text-center text-sm text-muted-foreground">
