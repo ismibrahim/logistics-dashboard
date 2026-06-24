@@ -23,6 +23,7 @@ type Customer = {
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([])
+  const [searchTerm, setSearchTerm] = useState("")
   const [depots, setDepots] = useState<any[]>([])
   const [allowedAssignments, setAllowedAssignments] = useState<any[]>([])
   const [showForm, setShowForm] = useState(false)
@@ -61,6 +62,16 @@ const totalDemand = customers.reduce(
   (s, c) => s + c.demand,
   0
 )
+
+const filteredCustomers = customers.filter((c) => {
+  const term = searchTerm.toLowerCase()
+  return (
+    c.name?.toLowerCase().includes(term) ||
+    c.address?.toLowerCase().includes(term) ||
+    c.city?.toLowerCase().includes(term) ||
+    String(c.customer_id).includes(term)
+  )
+})
 
 
 
@@ -341,6 +352,8 @@ async function deleteCustomer(customerId: number) {
             <Search className="absolute left-3 size-4 text-muted-foreground" />
             <input
               placeholder="Filter customers…"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
               className="h-10 w-full rounded-lg border border-input bg-card pl-9 pr-3 text-sm outline-none ring-ring/40 transition focus:ring-2"
             />
           </div>
@@ -364,7 +377,7 @@ async function deleteCustomer(customerId: number) {
                 </tr>
               </thead>
               <tbody>
-                {customers.map((c) => (
+                {filteredCustomers.map((c) => (
                   <tr key={c.customer_id} className="border-b border-border last:border-0 transition-colors hover:bg-accent/40">
                     <td className="px-5 py-3.5">
                       <div className="font-medium text-foreground">{c.name}</div>

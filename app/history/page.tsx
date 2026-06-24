@@ -19,6 +19,9 @@ type Run = {
   runtime_s: number | null
   gap_percent: number | null
   routes_json: string | null
+  heuristic_cost: number | null
+  exact_cost: number | null
+  vehicles_used: number | null
 }
 
 type SortKey =
@@ -28,8 +31,11 @@ type SortKey =
   | "solver_status"
   | "total_distance_km"
   | "total_cost"
-  | "runtime_s"
+  | "heuristic_cost"
+  | "exact_cost"
   | "gap_percent"
+  | "runtime_s"
+  | "vehicles_used"
 
 const COLUMNS: { key: SortKey; label: string }[] = [
   { key: "timestamp", label: "Timestamp" },
@@ -38,8 +44,11 @@ const COLUMNS: { key: SortKey; label: string }[] = [
   { key: "solver_status", label: "Solver Status" },
   { key: "total_distance_km", label: "Distance (km)" },
   { key: "total_cost", label: "Cost (€)" },
-  { key: "runtime_s", label: "Runtime (s)" },
+  { key: "heuristic_cost", label: "Heuristic Cost (€)" },
+  { key: "exact_cost", label: "Exact Cost (€)" },
   { key: "gap_percent", label: "Gap (%)" },
+  { key: "runtime_s", label: "Runtime (s)" },
+  { key: "vehicles_used", label: "Vehicles Used" },
 ]
 
 // solver_status ist ein freier Text aus pulp.LpStatus bzw. eigenen Fehlermeldungen
@@ -186,14 +195,23 @@ export default function HistoryPage() {
                       <td className="px-5 py-3.5 text-muted-foreground">
                         {formatNumber(run.total_distance_km, 2, " km")}
                       </td>
-                      <td className="px-5 py-3.5 text-muted-foreground">
+                      <td className="px-5 py-3.5 whitespace-nowrap text-muted-foreground">
                         {formatNumber(run.total_cost, 2, " €")}
                       </td>
-                      <td className="px-5 py-3.5 text-muted-foreground">
+                      <td className="px-5 py-3.5 whitespace-nowrap text-muted-foreground">
+                        {formatNumber(run.heuristic_cost, 2, " €")}
+                      </td>
+                      <td className="px-5 py-3.5 whitespace-nowrap text-muted-foreground">
+                        {formatNumber(run.exact_cost, 2, " €")}
+                      </td>
+                      <td className="px-5 py-3.5 whitespace-nowrap text-muted-foreground">
+                        {run.gap_percent != null ? `+${run.gap_percent.toFixed(1)}%` : "—"}
+                      </td>
+                      <td className="px-5 py-3.5 whitespace-nowrap text-muted-foreground">
                         {formatNumber(run.runtime_s, 3, " s")}
                       </td>
-                      <td className="px-5 py-3.5 text-muted-foreground">
-                        {run.gap_percent != null ? `+${run.gap_percent.toFixed(1)}%` : "—"}
+                      <td className="px-5 py-3.5 whitespace-nowrap text-muted-foreground">
+                        {run.vehicles_used ?? "—"}
                       </td>
                     </tr>
                   ))}
