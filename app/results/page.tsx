@@ -712,10 +712,10 @@ const totalCost =
                     <td className="px-5 py-3.5 font-medium text-foreground">Gap</td>
                     <td className="px-5 py-3.5 text-muted-foreground">—</td>
                     <td className="px-5 py-3.5 text-muted-foreground">
-                      {compareData.heuristic?.gap_percent != null ? `+${compareData.heuristic.gap_percent.toFixed(1)}%` : "–"}
+                      {compareData.heuristic?.gap_percent != null ? `${compareData.heuristic.gap_percent >= 0 ? "+" : ""}${compareData.heuristic.gap_percent.toFixed(1)}%` : "–"}
                     </td>
                     <td className="px-5 py-3.5 text-muted-foreground">
-                      {compareData.clarke_wright?.gap_percent != null ? `+${compareData.clarke_wright.gap_percent.toFixed(1)}%` : "–"}
+                      {compareData.clarke_wright?.gap_percent != null ? `${compareData.clarke_wright.gap_percent >= 0 ? "+" : ""}${compareData.clarke_wright.gap_percent.toFixed(1)}%` : "–"}
                     </td>
                   </tr>
                 </tbody>
