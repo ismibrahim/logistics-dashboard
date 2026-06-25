@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation"
 import { useState, useEffect } from "react"
-import { Clock, RotateCcw, Timer, Play, Loader2, Settings2, Users, Truck, Warehouse, AlertTriangle } from "lucide-react"
+import { Clock, RotateCcw, Timer, Play, Loader2, Settings2, Users, Truck, Warehouse, AlertTriangle, Zap } from "lucide-react"
 import { AppShell } from "@/components/app-shell"
 import { Topbar } from "@/components/topbar"
 import { PageHeader } from "@/components/page-header"
@@ -18,6 +18,7 @@ export default function OptimizationPage() {
   const [timeWindows, setTimeWindows] = useState(false)
   const [returnToDepot, setReturnToDepot] = useState(true)
   const [balanceLoad, setBalanceLoad] = useState(false)
+  const [useHeuristicWarmstart, setUseHeuristicWarmstart] = useState(true)
   const [maxDuration, setMaxDuration] = useState([99999])
   const [timeLimitSeconds, setTimeLimitSeconds] = useState(60)
   const [running, setRunning] = useState(false)
@@ -120,6 +121,7 @@ async function runHeuristic() {
       returnToDepot,
       timeWindows,
       balanceLoad,
+      useHeuristicWarmstart,
       maxDuration: maxDuration[0],
       timeLimitSeconds,
       objective: "distance",
@@ -343,6 +345,17 @@ const selectedDemand = customers
                 <Switch checked={balanceLoad} onCheckedChange={setBalanceLoad} />
               </div>
 
+              <div className="flex items-center justify-between">
+                <div className="flex items-start gap-3">
+                  <Zap className="mt-0.5 size-5 text-muted-foreground" />
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Heuristik-Warmstart</p>
+                    <p className="text-xs text-muted-foreground">Exakter Solver startet mit der Heuristik-Lösung als MIP-Start — i. d. R. schneller bei größeren Instanzen (ohne Zeitfenster)</p>
+                  </div>
+                </div>
+                <Switch checked={useHeuristicWarmstart} onCheckedChange={setUseHeuristicWarmstart} />
+              </div>
+
               <Separator />
 
               <div className="space-y-3">
@@ -401,6 +414,7 @@ const selectedDemand = customers
                 <p>Objective: <span className="font-medium text-foreground">Minimize distance</span></p>
                 <p>Time windows: <span className="font-medium text-foreground">{timeWindows ? "On" : "Off"}</span></p>
                 <p>Return to depot: <span className="font-medium text-foreground">{returnToDepot ? "On" : "Off"}</span></p>
+                <p>Warmstart (exakt): <span className="font-medium text-foreground">{useHeuristicWarmstart ? "On" : "Off"}</span></p>
                 <div className="flex items-center justify-between pt-1">
                   <label htmlFor="time-limit-seconds" className="flex items-center gap-1.5">
                     <Timer className="size-3.5" />
