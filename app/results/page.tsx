@@ -35,7 +35,12 @@ function buildMapRoutes(result: any, vehicles: any[]) {
 
   return result.routes.map(([vehicleId, route]: [number, number[]], index: number) => ({
     id: vehicleId,
-    vehicle: vehicles.find((v) => v.vehicle_id === vehicleId)?.license_plate ?? `Vehicle ${vehicleId}`,
+    // vehicle_stats[index] ist positionsgleich zur Route und enthaelt das
+    // tatsaechlich genutzte Fahrzeug (vehicleId in routes[i][0] ist nur ein
+    // Backend-Index, KEINE echte vehicle_id - siehe Kommentar bei buildRouteDetails).
+    vehicle: result.vehicle_stats?.[index]?.license_plate
+      ?? vehicles.find((v) => v.vehicle_id === vehicleId)?.license_plate
+      ?? `Vehicle ${vehicleId}`,
     color: VEHICLE_COLORS[index % VEHICLE_COLORS.length],
     path: route.map((nodeId: number) => {
       const coords = result.coordinates[nodeId.toString()]
@@ -65,7 +70,11 @@ function buildRouteDetails(result: any, vehicles: any[], customers: any[], depot
 
     return {
       vehicleId,
-      vehicle: vehicles.find((v) => v.vehicle_id === vehicleId)?.license_plate ?? `Vehicle ${vehicleId}`,
+      // Fahrzeugname aus vehicle_stats[index] (positionsgleich, echte Fahrzeug-
+      // Daten) statt aus vehicleId (= nur Backend-Index, kein vehicle_id).
+      vehicle: result.vehicle_stats?.[index]?.license_plate
+        ?? vehicles.find((v) => v.vehicle_id === vehicleId)?.license_plate
+        ?? `Vehicle ${vehicleId}`,
       color: VEHICLE_COLORS[index % VEHICLE_COLORS.length],
       startDepot: stops[0]?.type === "depot" ? stops[0].label : "—",
       stops,
@@ -220,6 +229,8 @@ export default function ResultsPage() {
       ;(lastOptimizeRequest?.vehicle_ids ?? []).forEach((id: number) =>
         params.append("vehicle_ids", String(id))
       )
+      // Einheitliches Zeitlimit: derselbe Wert wie der exakte Solver (/optimize).
+      params.append("time_limit_s", String(lastOptimizeRequest?.timeLimitSeconds ?? 60))
       const response = await fetch(`http://127.0.0.1:8000/compare?${params.toString()}`, {
         signal: controller.signal,
       })
@@ -275,6 +286,7 @@ useEffect(() => {
   const solverRoutes = buildMapRoutes(solverResult, vehicles)
   const exactCompareRoutes = buildMapRoutes(compareData?.exact, vehicles)
   const heuristicCompareRoutes = buildMapRoutes(compareData?.heuristic, vehicles)
+  const cwCompareRoutes = buildMapRoutes(compareData?.clarke_wright, vehicles)
   const routeDetails = buildRouteDetails(solverResult, vehicles, customers, depots)
 
   const mapCustomers = customers.map((c: any) => ({
@@ -311,6 +323,7 @@ useEffect(() => {
 
   const exactCompareDepot = depotsUsedInRoutes(compareData?.exact)
   const heuristicCompareDepot = depotsUsedInRoutes(compareData?.heuristic)
+  const cwCompareDepot = depotsUsedInRoutes(compareData?.clarke_wright)
 
   // Toggle wirkt nur auf die Kunden-Marker; Depots bleiben immer sichtbar.
   // Ohne eindeutige Routing-Info (hasRoutingInfo === false) immer alle zeigen,
@@ -587,9 +600,9 @@ const totalCost =
               </p>
               <p
                 className="mt-1 text-xs text-muted-foreground"
-                title="Dieser Vergleich nutzt ein eigenes, festes Zeitlimit für den exakten Solver - unabhängig vom Zeitlimit-Feld auf der Optimization-Seite."
+                title="Der Vergleich nutzt dasselbe Zeitlimit wie der exakte Solver (Feld auf der Optimization-Seite)."
               >
-                Zeitlimit (exakter Solver): <span className="font-medium text-foreground">300s, fest</span>
+                Zeitlimit (exakter Solver): <span className="font-medium text-foreground">{lastOptimizeRequest?.timeLimitSeconds ?? 60}s</span>
               </p>
             </div>
             <Button
@@ -614,7 +627,7 @@ const totalCost =
             </p>
           )}
 
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             <Card className="overflow-hidden p-0">
               <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
                 <span className="flex items-center gap-1.5 text-xs font-medium text-foreground">
@@ -653,6 +666,25 @@ const totalCost =
                 </div>
               )}
             </Card>
+            <Card className="overflow-hidden p-0">
+              <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
+                <span className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+                  <Zap className="size-3.5" /> Clarke-Wright + 2-Opt + Or-Opt (Heuristik)
+                </span>
+              </div>
+              {compareData?.clarke_wright ? (
+                <MapPanel
+                  className="h-[360px] rounded-none border-0"
+                  routes={cwCompareRoutes}
+                  customers={mapCustomers}
+                  depots={cwCompareDepot}
+                />
+              ) : (
+                <div className="flex h-[360px] items-center justify-center px-6 text-center text-sm text-muted-foreground">
+                  {compareLoading ? "Vergleiche…" : "Kein Ergebnis."}
+                </div>
+              )}
+            </Card>
           </div>
 
           {!compareError && !compareNotSolved && compareData && (
@@ -663,6 +695,7 @@ const totalCost =
                     <th className="px-5 py-3 font-medium">Metric</th>
                     <th className="px-5 py-3 font-medium">Exact Solver (MILP)</th>
                     <th className="px-5 py-3 font-medium">Nearest Neighbor</th>
+                    <th className="px-5 py-3 font-medium">Clarke-Wright + 2-Opt + Or-Opt</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -670,22 +703,28 @@ const totalCost =
                     <td className="px-5 py-3.5 font-medium text-foreground">Total Distance</td>
                     <td className="px-5 py-3.5 text-muted-foreground">{compareData.exact?.distance_km?.toFixed(2)} km</td>
                     <td className="px-5 py-3.5 text-muted-foreground">{compareData.heuristic?.distance_km?.toFixed(2)} km</td>
+                    <td className="px-5 py-3.5 text-muted-foreground">{compareData.clarke_wright?.distance_km?.toFixed(2)} km</td>
                   </tr>
                   <tr className="border-b border-border last:border-0">
                     <td className="px-5 py-3.5 font-medium text-foreground">Total Cost</td>
                     <td className="px-5 py-3.5 text-muted-foreground">{compareData.exact?.cost?.toFixed(2)} €</td>
                     <td className="px-5 py-3.5 text-muted-foreground">{compareData.heuristic?.cost?.toFixed(2)} €</td>
+                    <td className="px-5 py-3.5 text-muted-foreground">{compareData.clarke_wright?.cost?.toFixed(2)} €</td>
                   </tr>
                   <tr className="border-b border-border last:border-0">
                     <td className="px-5 py-3.5 font-medium text-foreground">Runtime</td>
                     <td className="px-5 py-3.5 text-muted-foreground">{compareData.exact?.runtime_s?.toFixed(3)} s</td>
                     <td className="px-5 py-3.5 text-muted-foreground">{compareData.heuristic?.runtime_s?.toFixed(3)} s</td>
+                    <td className="px-5 py-3.5 text-muted-foreground">{compareData.clarke_wright?.runtime_s?.toFixed(3)} s</td>
                   </tr>
                   <tr className="border-b border-border last:border-0">
                     <td className="px-5 py-3.5 font-medium text-foreground">Gap</td>
                     <td className="px-5 py-3.5 text-muted-foreground">—</td>
                     <td className="px-5 py-3.5 text-muted-foreground">
-                      {compareData.heuristic?.gap_percent != null ? `+${compareData.heuristic.gap_percent.toFixed(1)}%` : "–"}
+                      {compareData.heuristic?.gap_percent != null ? `${compareData.heuristic.gap_percent >= 0 ? "+" : ""}${compareData.heuristic.gap_percent.toFixed(1)}%` : "–"}
+                    </td>
+                    <td className="px-5 py-3.5 text-muted-foreground">
+                      {compareData.clarke_wright?.gap_percent != null ? `${compareData.clarke_wright.gap_percent >= 0 ? "+" : ""}${compareData.clarke_wright.gap_percent.toFixed(1)}%` : "–"}
                     </td>
                   </tr>
                 </tbody>
