@@ -431,10 +431,9 @@ const selectedDemand = customers
                   />
                 </div>
                 <p className="text-[11px] italic text-muted-foreground/80">
-                  Nur relevant für den optionalen exakten Solver (Run Exact Solver auf der
-                  Ergebnis-Seite). Standard: 60s, max. 1h. Der separate "Solver vs. Heuristic
-                  Benchmark"-Block auf der Ergebnis-Seite nutzt ein eigenes, festes Zeitlimit
-                  (300s) und wird von diesem Feld nicht beeinflusst.
+                  Gilt für den exakten Solver (Run Exact Solver auf der Ergebnis-Seite) UND
+                  für den "Solver vs. Heuristic Benchmark"-Block — beide nutzen jetzt dieses
+                  Zeitlimit. Standard: 60s, min. 5s, max. 1h.
                 </p>
               </div>
             </Card>

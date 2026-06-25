@@ -220,6 +220,8 @@ export default function ResultsPage() {
       ;(lastOptimizeRequest?.vehicle_ids ?? []).forEach((id: number) =>
         params.append("vehicle_ids", String(id))
       )
+      // Einheitliches Zeitlimit: derselbe Wert wie der exakte Solver (/optimize).
+      params.append("time_limit_s", String(lastOptimizeRequest?.timeLimitSeconds ?? 60))
       const response = await fetch(`http://127.0.0.1:8000/compare?${params.toString()}`, {
         signal: controller.signal,
       })
@@ -587,9 +589,9 @@ const totalCost =
               </p>
               <p
                 className="mt-1 text-xs text-muted-foreground"
-                title="Dieser Vergleich nutzt ein eigenes, festes Zeitlimit für den exakten Solver - unabhängig vom Zeitlimit-Feld auf der Optimization-Seite."
+                title="Der Vergleich nutzt dasselbe Zeitlimit wie der exakte Solver (Feld auf der Optimization-Seite)."
               >
-                Zeitlimit (exakter Solver): <span className="font-medium text-foreground">300s, fest</span>
+                Zeitlimit (exakter Solver): <span className="font-medium text-foreground">{lastOptimizeRequest?.timeLimitSeconds ?? 60}s</span>
               </p>
             </div>
             <Button
