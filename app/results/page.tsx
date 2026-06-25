@@ -35,7 +35,12 @@ function buildMapRoutes(result: any, vehicles: any[]) {
 
   return result.routes.map(([vehicleId, route]: [number, number[]], index: number) => ({
     id: vehicleId,
-    vehicle: vehicles.find((v) => v.vehicle_id === vehicleId)?.license_plate ?? `Vehicle ${vehicleId}`,
+    // vehicle_stats[index] ist positionsgleich zur Route und enthaelt das
+    // tatsaechlich genutzte Fahrzeug (vehicleId in routes[i][0] ist nur ein
+    // Backend-Index, KEINE echte vehicle_id - siehe Kommentar bei buildRouteDetails).
+    vehicle: result.vehicle_stats?.[index]?.license_plate
+      ?? vehicles.find((v) => v.vehicle_id === vehicleId)?.license_plate
+      ?? `Vehicle ${vehicleId}`,
     color: VEHICLE_COLORS[index % VEHICLE_COLORS.length],
     path: route.map((nodeId: number) => {
       const coords = result.coordinates[nodeId.toString()]
@@ -65,7 +70,11 @@ function buildRouteDetails(result: any, vehicles: any[], customers: any[], depot
 
     return {
       vehicleId,
-      vehicle: vehicles.find((v) => v.vehicle_id === vehicleId)?.license_plate ?? `Vehicle ${vehicleId}`,
+      // Fahrzeugname aus vehicle_stats[index] (positionsgleich, echte Fahrzeug-
+      // Daten) statt aus vehicleId (= nur Backend-Index, kein vehicle_id).
+      vehicle: result.vehicle_stats?.[index]?.license_plate
+        ?? vehicles.find((v) => v.vehicle_id === vehicleId)?.license_plate
+        ?? `Vehicle ${vehicleId}`,
       color: VEHICLE_COLORS[index % VEHICLE_COLORS.length],
       startDepot: stops[0]?.type === "depot" ? stops[0].label : "—",
       stops,
