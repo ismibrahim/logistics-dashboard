@@ -19,6 +19,7 @@ export default function OptimizationPage() {
   const [returnToDepot, setReturnToDepot] = useState(true)
   const [balanceLoad, setBalanceLoad] = useState(false)
   const [useHeuristicWarmstart, setUseHeuristicWarmstart] = useState(true)
+  const [twOverrides, setTwOverrides] = useState<Array<{ cid: number | ""; start: string; end: string }>>([])
   const [maxDuration, setMaxDuration] = useState([99999])
   const [timeLimitSeconds, setTimeLimitSeconds] = useState(60)
   const [running, setRunning] = useState(false)
@@ -117,9 +118,24 @@ async function runHeuristic() {
 
   try {
     const allSelected = selectedCustomerIds.size === customers.length
+    // Zeitfenster-Overrides: nur gueltige Zeilen, nur wenn timeWindows an.
+    const validOverrides = twOverrides.filter(
+      (o) =>
+        o.cid !== "" &&
+        /^\d{2}:\d{2}$/.test(o.start) &&
+        /^\d{2}:\d{2}$/.test(o.end) &&
+        o.start < o.end,
+    )
+    const timeWindowOverrides =
+      timeWindows && validOverrides.length > 0
+        ? Object.fromEntries(
+            validOverrides.map((o) => [o.cid, { tw_start: o.start, tw_end: o.end }]),
+          )
+        : undefined
     const requestBody = {
       returnToDepot,
       timeWindows,
+      timeWindowOverrides,
       balanceLoad,
       useHeuristicWarmstart,
       maxDuration: maxDuration[0],
@@ -322,6 +338,79 @@ const selectedDemand = customers
                 </div>
                 <Switch checked={timeWindows} onCheckedChange={setTimeWindows} />
               </div>
+
+              {timeWindows && (
+                <div className="ml-8 space-y-2 rounded-md border border-border bg-muted/30 p-3">
+                  <p className="text-xs font-medium text-foreground">Zeitfenster-Overrides (max. 3 Kunden)</p>
+                  {twOverrides.map((o, i) => {
+                    const invalid =
+                      o.cid !== "" &&
+                      (!/^\d{2}:\d{2}$/.test(o.start) || !/^\d{2}:\d{2}$/.test(o.end) || o.start >= o.end)
+                    return (
+                      <div key={i} className="flex items-center gap-2">
+                        <select
+                          value={o.cid}
+                          onChange={(e) =>
+                            setTwOverrides((prev) =>
+                              prev.map((x, j) =>
+                                j === i ? { ...x, cid: e.target.value === "" ? "" : Number(e.target.value) } : x,
+                              ),
+                            )
+                          }
+                          className="min-w-0 flex-1 rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground"
+                        >
+                          <option value="">Kunde…</option>
+                          {customers.map((c: any) => (
+                            <option key={c.customer_id} value={c.customer_id}>
+                              {c.customer_id} — {c.name}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          type="text"
+                          placeholder="HH:MM"
+                          value={o.start}
+                          onChange={(e) =>
+                            setTwOverrides((prev) => prev.map((x, j) => (j === i ? { ...x, start: e.target.value } : x)))
+                          }
+                          className="w-16 rounded-md border border-input bg-background px-2 py-1 text-center text-xs text-foreground"
+                        />
+                        <span className="text-xs text-muted-foreground">–</span>
+                        <input
+                          type="text"
+                          placeholder="HH:MM"
+                          value={o.end}
+                          onChange={(e) =>
+                            setTwOverrides((prev) => prev.map((x, j) => (j === i ? { ...x, end: e.target.value } : x)))
+                          }
+                          className="w-16 rounded-md border border-input bg-background px-2 py-1 text-center text-xs text-foreground"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setTwOverrides((prev) => prev.filter((_, j) => j !== i))}
+                          className="px-1 text-muted-foreground hover:text-destructive"
+                          aria-label="Zeile entfernen"
+                        >
+                          ×
+                        </button>
+                        {invalid && <span className="text-[10px] text-destructive">ungültig</span>}
+                      </div>
+                    )
+                  })}
+                  {twOverrides.length < 3 && (
+                    <button
+                      type="button"
+                      onClick={() => setTwOverrides((prev) => [...prev, { cid: "", start: "", end: "" }])}
+                      className="text-xs text-primary hover:underline"
+                    >
+                      + Zeile hinzufügen
+                    </button>
+                  )}
+                  <p className="text-[10px] text-muted-foreground">
+                    Servicezeit kommt aus den Stammdaten. Format HH:MM, tw_start &lt; tw_end.
+                  </p>
+                </div>
+              )}
 
               <div className="flex items-center justify-between">
                 <div className="flex items-start gap-3">

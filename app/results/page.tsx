@@ -65,6 +65,8 @@ function buildRouteDetails(result: any, vehicles: any[], customers: any[], depot
             id: nodeId,
             label: customers.find((c) => c.customer_id === nodeId)?.name ?? `Customer ${nodeId}`,
             demand: customers.find((c) => c.customer_id === nodeId)?.demand ?? 0,
+            arrival: result.arrival_times?.[String(nodeId)] ?? null,
+            window: result.time_window_data?.[String(nodeId)] ?? null,
           },
     )
 
@@ -492,6 +494,44 @@ const totalCost =
           </div>
         )}
 
+        {/* Zeitfenster-Status-Badge (nur wenn TW aktiv) */}
+        {solverResult?.time_windows_active && (() => {
+          const st: string = solverResult.status ?? ""
+          if (st === "Infeasible" || st === "Not Solved") {
+            return (
+              <div className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                <p>🔴 Zeitfenster nicht erfüllbar — Overrides prüfen oder Zeitlimit erhöhen.</p>
+              </div>
+            )
+          }
+          if (solverResult.method_used === "exact") {
+            return (
+              <div className="flex items-start gap-3 rounded-lg border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-900 dark:border-green-900 dark:bg-green-950/40 dark:text-green-200">
+                <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
+                <p>🟢 Alle Zeitfenster eingehalten (garantiert durch exakten Solver).</p>
+              </div>
+            )
+          }
+          if (solverResult.time_windows_respected === true) {
+            return (
+              <div className="flex items-start gap-3 rounded-lg border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-900 dark:border-green-900 dark:bg-green-950/40 dark:text-green-200">
+                <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
+                <p>🟢 Zeitfenster eingehalten (0 Verletzungen, Heuristik).</p>
+              </div>
+            )
+          }
+          if (solverResult.time_windows_respected === false) {
+            return (
+              <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                <p>🟡 {solverResult.time_window_violations} Zeitfenster-Verletzung(en) — die Heuristik optimiert Zeitfenster nicht.</p>
+              </div>
+            )
+          }
+          return null
+        })()}
+
         {/* Stats */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <KpiCard label="Total Distance" value={hasResult ? solverResult.distance.toFixed(1) : "–"} unit="km" icon={RouteIcon}/>
@@ -813,11 +853,28 @@ const totalCost =
                     {stop.type === "depot" ? (
                       <span className="text-foreground">{stop.label}</span>
                     ) : (
-                      <span>
-                        {stop.label}{" "}
-                        <span className="text-xs">
-                          (#{stop.id}, {stop.demand} units)
+                      <span className="inline-flex flex-col leading-tight">
+                        <span>
+                          {stop.label}{" "}
+                          <span className="text-xs">
+                            (#{stop.id}, {stop.demand} units)
+                          </span>
                         </span>
+                        {solverResult?.time_windows_active && stop.arrival && (
+                          <span
+                            className={
+                              stop.window && stop.arrival < stop.window.tw_start
+                                ? "text-[11px] text-green-600 dark:text-green-500"
+                                : stop.window && stop.arrival > stop.window.tw_end
+                                  ? "text-[11px] text-destructive"
+                                  : "text-[11px] text-muted-foreground"
+                            }
+                          >
+                            🕒 {stop.arrival}
+                            {stop.window ? ` · ${stop.window.tw_start}–${stop.window.tw_end}` : ""}
+                            {stop.window && stop.arrival < stop.window.tw_start ? " (wartet)" : ""}
+                          </span>
+                        )}
                       </span>
                     )}
                   </span>
