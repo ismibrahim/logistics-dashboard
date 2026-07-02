@@ -624,8 +624,8 @@ const totalCost =
             depots={mapDepots}
           />
           <p className="border-t border-border px-5 py-3 text-xs leading-relaxed text-muted-foreground">
-            Routes are generated using real road network data from OpenRouteService and optimized using a Multi-Depot
-            CVRP/VRPTW model.
+            Routen werden mit einem Multi-Depot CVRP/VRPTW-Modell optimiert. Distanzen und Fahrzeiten
+            basieren auf einer euklidischen Näherung (Luftlinie, Ø 65 km/h) — keine echten Straßendaten.
           </p>
         </Card>
 
@@ -741,15 +741,15 @@ const totalCost =
                 <tbody>
                   <tr className="border-b border-border last:border-0">
                     <td className="px-5 py-3.5 font-medium text-foreground">Total Distance</td>
-                    <td className="px-5 py-3.5 text-muted-foreground">{compareData.exact?.distance_km?.toFixed(2)} km</td>
-                    <td className="px-5 py-3.5 text-muted-foreground">{compareData.heuristic?.distance_km?.toFixed(2)} km</td>
-                    <td className="px-5 py-3.5 text-muted-foreground">{compareData.clarke_wright?.distance_km?.toFixed(2)} km</td>
+                    <td className="px-5 py-3.5 text-muted-foreground">{compareData.exact?.distance_km != null ? `${compareData.exact.distance_km.toFixed(2)} km` : "– (keine Lösung im Zeitlimit)"}</td>
+                    <td className="px-5 py-3.5 text-muted-foreground">{compareData.heuristic?.distance_km != null ? `${compareData.heuristic.distance_km.toFixed(2)} km` : "–"}</td>
+                    <td className="px-5 py-3.5 text-muted-foreground">{compareData.clarke_wright?.distance_km != null ? `${compareData.clarke_wright.distance_km.toFixed(2)} km` : "–"}</td>
                   </tr>
                   <tr className="border-b border-border last:border-0">
                     <td className="px-5 py-3.5 font-medium text-foreground">Total Cost</td>
-                    <td className="px-5 py-3.5 text-muted-foreground">{compareData.exact?.cost?.toFixed(2)} €</td>
-                    <td className="px-5 py-3.5 text-muted-foreground">{compareData.heuristic?.cost?.toFixed(2)} €</td>
-                    <td className="px-5 py-3.5 text-muted-foreground">{compareData.clarke_wright?.cost?.toFixed(2)} €</td>
+                    <td className="px-5 py-3.5 text-muted-foreground">{compareData.exact?.cost != null ? `${compareData.exact.cost.toFixed(2)} €` : "–"}</td>
+                    <td className="px-5 py-3.5 text-muted-foreground">{compareData.heuristic?.cost != null ? `${compareData.heuristic.cost.toFixed(2)} €` : "–"}</td>
+                    <td className="px-5 py-3.5 text-muted-foreground">{compareData.clarke_wright?.cost != null ? `${compareData.clarke_wright.cost.toFixed(2)} €` : "–"}</td>
                   </tr>
                   <tr className="border-b border-border last:border-0">
                     <td className="px-5 py-3.5 font-medium text-foreground">Runtime</td>

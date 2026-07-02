@@ -454,7 +454,7 @@ const selectedDemand = customers
                     <p className="text-sm font-medium text-foreground">Maximum route duration</p>
                   </div>
                   <span className="rounded-md bg-accent px-2.5 py-1 text-sm font-semibold text-accent-foreground">
-                    {hours}h {mins.toString().padStart(2, "0")}m
+                    {maxDuration[0] > 480 ? "Kein Limit" : `${hours}h ${mins.toString().padStart(2, "0")}m`}
                   </span>
                 </div>
                 <Slider
