@@ -535,7 +535,7 @@ const totalCost =
         {/* Stats */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <KpiCard label="Total Distance" value={hasResult ? solverResult.distance.toFixed(1) : "–"} unit="km" icon={RouteIcon}/>
-          <KpiCard label="Total Cost" value={hasResult ? totalCost : "–"} unit="€" icon={Euro} />
+          <KpiCard label="Total Cost" value={hasResult ? totalCost.toFixed(2) : "–"} unit="€" icon={Euro} />
           <KpiCard label="Total Time" value={hasResult ? estimatedTime : "–"} unit="h" icon={Clock} />
           <KpiCard label="Avg. Load" value={hasResult ? avgLoad : "–"} unit="%" icon={Gauge} />
         </div>
