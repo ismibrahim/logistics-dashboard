@@ -441,8 +441,8 @@ const selectedDemand = customers
                 <div className="flex items-start gap-3">
                   <Zap className="mt-0.5 size-5 text-muted-foreground" />
                   <div>
-                    <p className="text-sm font-medium text-foreground">Heuristik-Warmstart</p>
-                    <p className="text-xs text-muted-foreground">Exakter Solver startet mit der Heuristik-Lösung als MIP-Start — i. d. R. schneller bei größeren Instanzen (ohne Zeitfenster)</p>
+                    <p className="text-sm font-medium text-foreground">Heuristic warm start</p>
+                    <p className="text-xs text-muted-foreground">Exact solver starts from the heuristic solution as a MIP start — usually faster on larger instances (without time windows).</p>
                   </div>
                 </div>
                 <Switch checked={useHeuristicWarmstart} onCheckedChange={setUseHeuristicWarmstart} />
@@ -457,7 +457,7 @@ const selectedDemand = customers
                     <p className="text-sm font-medium text-foreground">Maximum route duration</p>
                   </div>
                   <span className="rounded-md bg-accent px-2.5 py-1 text-sm font-semibold text-accent-foreground">
-                    {maxDuration[0] > 480 ? "Kein Limit" : `${hours}h ${mins.toString().padStart(2, "0")}m`}
+                    {maxDuration[0] > 480 ? "No limit" : `${hours}h ${mins.toString().padStart(2, "0")}m`}
                   </span>
                 </div>
                 <Slider
