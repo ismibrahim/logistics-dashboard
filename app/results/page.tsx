@@ -140,7 +140,7 @@ export default function ResultsPage() {
       const data = await response.json()
 
       if (!response.ok) {
-        setExactError(data?.detail ?? `Exakter Solver fehlgeschlagen (HTTP ${response.status})`)
+        setExactError(data?.detail ?? `Exact solver failed (HTTP ${response.status})`)
         return
       }
 
@@ -150,9 +150,9 @@ export default function ResultsPage() {
       console.error(error)
       setExactError(
         error?.name === "AbortError"
-          ? `Keine Antwort innerhalb von Zeitlimit + Puffer (${Math.round(timeoutMs / 1000)}s). ` +
-            "Der Solver läuft im Backend ggf. noch weiter, die Verbindung wurde clientseitig beendet."
-          : "Backend nicht erreichbar",
+          ? `No response within time limit + buffer (${Math.round(timeoutMs / 1000)}s). ` +
+            "The solver may still be running in the backend; the connection was closed client-side."
+          : "Backend unreachable",
       )
     } finally {
       clearTimeout(timeoutId)
@@ -245,7 +245,7 @@ export default function ResultsPage() {
       if (requestId !== compareRequestIdRef.current) return
       if (error?.name !== "AbortError") {
         console.error(error)
-        setCompareError("Backend nicht erreichbar")
+        setCompareError("Backend unreachable")
       }
     } finally {
       if (requestId === compareRequestIdRef.current) {
@@ -428,7 +428,7 @@ const totalCost =
                 ) : (
                   <Zap className="size-3" />
                 )}
-                {solverResult.method_used === "exact" ? "Exakt" : "Heuristik"}
+                {solverResult.method_used === "exact" ? "Exact" : "Heuristic"}
               </Badge>
             )}
             <Button
@@ -437,10 +437,10 @@ const totalCost =
               className="gap-2"
               onClick={runExactSolver}
               disabled={exactRunning || !lastOptimizeRequest}
-              title={!lastOptimizeRequest ? "Kein gespeicherter Optimierungs-Request gefunden" : undefined}
+              title={!lastOptimizeRequest ? "No saved optimization request found" : undefined}
             >
               {exactRunning ? <Loader2 className="size-4 animate-spin" /> : <Cpu className="size-4" />}
-              {exactRunning ? "Exakter Solver läuft…" : "Run Exact Solver"}
+              {exactRunning ? "Exact solver running…" : "Run Exact Solver"}
             </Button>
             <Button size="sm" variant="outline" className="gap-2">
               <Download className="size-4" /> Export
@@ -454,9 +454,9 @@ const totalCost =
           <div className="flex items-start gap-3 rounded-lg border border-blue-300 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-200">
             <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin" />
             <p>
-              Exakter Solver läuft noch… (Zeitlimit: {lastOptimizeRequest?.timeLimitSeconds ?? 60}s).
-              Kann je nach Instanzgröße und Zeitlimit deutlich länger dauern - das Heuristik-Ergebnis
-              unten bleibt bis dahin sichtbar und wird erst beim Eintreffen des exakten Ergebnisses ersetzt.
+              Exact solver still running… (time limit: {lastOptimizeRequest?.timeLimitSeconds ?? 60}s).
+              Can take significantly longer depending on instance size and time limit — the heuristic
+              result below stays visible until the exact result arrives and replaces it.
             </p>
           </div>
         )}
@@ -464,7 +464,7 @@ const totalCost =
         {exactError && (
           <div className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-            <p>Exakter Solver fehlgeschlagen: {exactError}</p>
+            <p>Exact solver failed: {exactError}</p>
           </div>
         )}
 
@@ -472,7 +472,7 @@ const totalCost =
           <div className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
             <p>
-              Solver konnte keine gültige Lösung finden (Status: {solverResult.solver_status}).
+              Solver could not find a valid solution (status: {solverResult.solver_status}).
             </p>
           </div>
         )}
@@ -488,7 +488,7 @@ const totalCost =
           <div className="flex items-start gap-3 rounded-lg border border-orange-300 bg-orange-50 px-4 py-3 text-sm text-orange-900 dark:border-orange-900 dark:bg-orange-950/40 dark:text-orange-200">
             <Timer className="mt-0.5 size-4 shrink-0" />
             <p>
-              Zeitlimit erreicht — beste gefundene Lösung, Gap:{" "}
+              Time limit reached — best solution found, gap:{" "}
               {solverResult.optimality_gap_percent?.toFixed(1) ?? "?"} %
             </p>
           </div>
@@ -501,7 +501,7 @@ const totalCost =
             return (
               <div className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
                 <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-                <p>🔴 Zeitfenster nicht erfüllbar — Overrides prüfen oder Zeitlimit erhöhen.</p>
+                <p>🔴 Time windows not satisfiable — check overrides or increase the time limit.</p>
               </div>
             )
           }
@@ -509,7 +509,7 @@ const totalCost =
             return (
               <div className="flex items-start gap-3 rounded-lg border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-900 dark:border-green-900 dark:bg-green-950/40 dark:text-green-200">
                 <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
-                <p>🟢 Alle Zeitfenster eingehalten (garantiert durch exakten Solver).</p>
+                <p>🟢 All time windows respected (guaranteed by the exact solver).</p>
               </div>
             )
           }
@@ -517,7 +517,7 @@ const totalCost =
             return (
               <div className="flex items-start gap-3 rounded-lg border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-900 dark:border-green-900 dark:bg-green-950/40 dark:text-green-200">
                 <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
-                <p>🟢 Zeitfenster eingehalten (0 Verletzungen, Heuristik).</p>
+                <p>🟢 Time windows respected (0 violations, heuristic).</p>
               </div>
             )
           }
@@ -525,7 +525,7 @@ const totalCost =
             return (
               <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
                 <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-                <p>🟡 {solverResult.time_window_violations} Zeitfenster-Verletzung(en) — die Heuristik optimiert Zeitfenster nicht.</p>
+                <p>🟡 {solverResult.time_window_violations} time window violation(s) — the heuristic reports time window violations but does not repair them.</p>
               </div>
             )
           }
@@ -554,9 +554,9 @@ const totalCost =
             <Card className="gap-3 p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-sm font-semibold text-foreground">Plausibilitätsprüfung</h2>
+                  <h2 className="text-sm font-semibold text-foreground">Plausibility Check</h2>
                   <p className="text-xs text-muted-foreground">
-                    Kunden, Kapazität, Depot-Start/Ende, Gesamtnachfrage vs. Gesamtkapazität
+                    Customers, capacity, depot start/end, total demand vs. total capacity
                   </p>
                 </div>
                 <Badge
@@ -570,12 +570,12 @@ const totalCost =
                   ) : (
                     <AlertTriangle className="size-3.5" />
                   )}
-                  {notApplicable ? "Nicht anwendbar" : passed ? "PASS" : "FAIL"}
+                  {notApplicable ? "Not applicable" : passed ? "PASS" : "FAIL"}
                 </Badge>
               </div>
               {notApplicable && (
                 <p className="text-xs text-muted-foreground">
-                  Solver fand keine zulässige Lösung (Status: {solverResult.status}) – keine Routen zu prüfen.
+                  Solver found no feasible solution (status: {solverResult.status}) – no routes to check.
                 </p>
               )}
               {!notApplicable && !passed && (
@@ -607,13 +607,13 @@ const totalCost =
                   </span>
                 ))}
               </div>
-              <label className="flex items-center gap-2 text-muted-foreground" title="Kunden, die in keiner Route dieses Laufs vorkommen, ein- oder ausblenden">
+              <label className="flex items-center gap-2 text-muted-foreground" title="Show or hide customers that are not part of any route in this run">
                 <Switch
                   checked={showUnroutedCustomers}
                   onCheckedChange={setShowUnroutedCustomers}
                   disabled={!hasRoutingInfo}
                 />
-                Nicht beroutete Kunden anzeigen
+                Show unrouted customers
               </label>
             </div>
           </div>
@@ -624,8 +624,8 @@ const totalCost =
             depots={mapDepots}
           />
           <p className="border-t border-border px-5 py-3 text-xs leading-relaxed text-muted-foreground">
-            Routen werden mit einem Multi-Depot CVRP/VRPTW-Modell optimiert. Distanzen und Fahrzeiten
-            basieren auf einer euklidischen Näherung (Luftlinie, Ø 65 km/h) — keine echten Straßendaten.
+            Routes are optimized with a multi-depot CVRP/VRPTW model. Distances and travel times
+            are based on a Euclidean approximation (straight-line, avg. 65 km/h) — not real road data.
           </p>
         </Card>
 
@@ -635,14 +635,14 @@ const totalCost =
             <div>
               <h2 className="text-sm font-semibold text-foreground">Solver vs. Heuristic Benchmark</h2>
               <p className="text-xs text-muted-foreground">
-                Vereinfachter Vergleich auf Einzeldepot-Basis ohne Zeitfenster — Routen können daher von der
-                Multi-Depot-Optimierung oben abweichen. Aussagekräftig ist der direkte Distanz-/Kosten-Vergleich.
+                Simplified comparison on a single-depot basis without time windows — routes may therefore
+                differ from the multi-depot optimization above. The direct distance/cost comparison is what's meaningful here.
               </p>
               <p
                 className="mt-1 text-xs text-muted-foreground"
-                title="Der Vergleich nutzt dasselbe Zeitlimit wie der exakte Solver (Feld auf der Optimization-Seite)."
+                title="The comparison uses the same time limit as the exact solver (field on the Optimization page)."
               >
-                Zeitlimit (exakter Solver): <span className="font-medium text-foreground">{lastOptimizeRequest?.timeLimitSeconds ?? 60}s</span>
+                Time limit (exact solver): <span className="font-medium text-foreground">{lastOptimizeRequest?.timeLimitSeconds ?? 60}s</span>
               </p>
             </div>
             <Button
@@ -653,7 +653,7 @@ const totalCost =
               disabled={compareLoading || customerIdsForCompare.length === 0}
             >
               {compareLoading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
-              {compareLoading ? "Vergleiche…" : "Erneut vergleichen"}
+              {compareLoading ? "Comparing…" : "Compare again"}
             </Button>
           </div>
 
@@ -663,7 +663,7 @@ const totalCost =
 
           {!compareError && compareNotSolved && (
             <p className="text-sm text-destructive">
-              Vergleich nicht möglich (Status: {compareData.solver_status}).
+              Comparison not possible (status: {compareData.solver_status}).
             </p>
           )}
 
@@ -683,14 +683,14 @@ const totalCost =
                 />
               ) : (
                 <div className="flex h-[360px] items-center justify-center px-6 text-center text-sm text-muted-foreground">
-                  {compareLoading ? "Vergleiche…" : "Kein Ergebnis (exakter Solver hat keine Lösung gefunden)."}
+                  {compareLoading ? "Comparing…" : "No result (exact solver found no solution)."}
                 </div>
               )}
             </Card>
             <Card className="overflow-hidden p-0">
               <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
                 <span className="flex items-center gap-1.5 text-xs font-medium text-foreground">
-                  <Zap className="size-3.5" /> Nearest Neighbor (Heuristik)
+                  <Zap className="size-3.5" /> Nearest Neighbor (Heuristic)
                 </span>
               </div>
               {compareData?.heuristic ? (
@@ -702,14 +702,14 @@ const totalCost =
                 />
               ) : (
                 <div className="flex h-[360px] items-center justify-center px-6 text-center text-sm text-muted-foreground">
-                  {compareLoading ? "Vergleiche…" : "Kein Ergebnis."}
+                  {compareLoading ? "Comparing…" : "No result."}
                 </div>
               )}
             </Card>
             <Card className="overflow-hidden p-0">
               <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
                 <span className="flex items-center gap-1.5 text-xs font-medium text-foreground">
-                  <Zap className="size-3.5" /> Clarke-Wright + 2-Opt + Or-Opt (Heuristik)
+                  <Zap className="size-3.5" /> Clarke-Wright + 2-Opt + Or-Opt (Heuristic)
                 </span>
               </div>
               {compareData?.clarke_wright ? (
@@ -721,7 +721,7 @@ const totalCost =
                 />
               ) : (
                 <div className="flex h-[360px] items-center justify-center px-6 text-center text-sm text-muted-foreground">
-                  {compareLoading ? "Vergleiche…" : "Kein Ergebnis."}
+                  {compareLoading ? "Comparing…" : "No result."}
                 </div>
               )}
             </Card>
@@ -741,7 +741,7 @@ const totalCost =
                 <tbody>
                   <tr className="border-b border-border last:border-0">
                     <td className="px-5 py-3.5 font-medium text-foreground">Total Distance</td>
-                    <td className="px-5 py-3.5 text-muted-foreground">{compareData.exact?.distance_km != null ? `${compareData.exact.distance_km.toFixed(2)} km` : "– (keine Lösung im Zeitlimit)"}</td>
+                    <td className="px-5 py-3.5 text-muted-foreground">{compareData.exact?.distance_km != null ? `${compareData.exact.distance_km.toFixed(2)} km` : "– (no solution within time limit)"}</td>
                     <td className="px-5 py-3.5 text-muted-foreground">{compareData.heuristic?.distance_km != null ? `${compareData.heuristic.distance_km.toFixed(2)} km` : "–"}</td>
                     <td className="px-5 py-3.5 text-muted-foreground">{compareData.clarke_wright?.distance_km != null ? `${compareData.clarke_wright.distance_km.toFixed(2)} km` : "–"}</td>
                   </tr>
@@ -835,7 +835,7 @@ const totalCost =
         <div>
           <h2 className="text-sm font-semibold text-foreground">Route Details</h2>
           <p className="text-xs text-muted-foreground">
-            Reihenfolge der Stops pro Fahrzeug — Depot zu Depot.
+            Order of stops per vehicle — depot to depot.
           </p>
         </div>
 
@@ -872,7 +872,7 @@ const totalCost =
                           >
                             🕒 {stop.arrival}
                             {stop.window ? ` · ${stop.window.tw_start}–${stop.window.tw_end}` : ""}
-                            {stop.window && stop.arrival < stop.window.tw_start ? " (wartet)" : ""}
+                            {stop.window && stop.arrival < stop.window.tw_start ? " (waiting)" : ""}
                           </span>
                         )}
                       </span>
@@ -889,7 +889,7 @@ const totalCost =
             </div>
           ))}
           {routeDetails.length === 0 && (
-            <p className="text-sm text-muted-foreground">Keine Routen vorhanden.</p>
+            <p className="text-sm text-muted-foreground">No routes available.</p>
           )}
         </div>
       </Card>

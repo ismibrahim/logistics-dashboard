@@ -164,7 +164,7 @@ async function runHeuristic() {
       // Konfigurationsfehler wie ein Fahrzeug ohne Depot-Zuordnung) - kein
       // Navigieren zu /results mit einem kaputten Objekt, Fehler bleibt hier
       // sichtbar.
-      setOptimizeError(data?.detail ?? `Optimierung fehlgeschlagen (HTTP ${response.status})`)
+      setOptimizeError(data?.detail ?? `Optimization failed (HTTP ${response.status})`)
       return
     }
 

@@ -70,7 +70,7 @@ function formatNumber(value: number | null, digits = 2, suffix = ""): string {
 }
 
 function formatTimestamp(isoTimestamp: string): string {
-  return new Date(isoTimestamp).toLocaleString("de-DE", {
+  return new Date(isoTimestamp).toLocaleString("en-GB", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -92,7 +92,7 @@ export default function HistoryPage() {
       .then((data) => setRuns(data))
       .catch((err) => {
         console.error(err)
-        setError("Backend nicht erreichbar")
+        setError("Backend unreachable")
       })
       .finally(() => setLoading(false))
   }, [])
@@ -129,14 +129,14 @@ export default function HistoryPage() {
       <Topbar />
       <PageHeader
         title="Run History"
-        description={`${runs.length} gespeicherte Optimierungs-/Vergleichsläufe, neueste zuerst.`}
+        description={`${runs.length} saved optimization/comparison runs, newest first.`}
       />
 
       <div className="flex-1 space-y-6 overflow-y-auto p-6">
         <Card className="gap-0 overflow-hidden p-0">
           {loading && (
             <div className="flex items-center justify-center gap-2 p-10 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" /> Lade Historie…
+              <Loader2 className="size-4 animate-spin" /> Loading history…
             </div>
           )}
 
@@ -146,7 +146,7 @@ export default function HistoryPage() {
 
           {!loading && !error && runs.length === 0 && (
             <p className="p-6 text-sm text-muted-foreground">
-              Noch keine Läufe gespeichert. Starte eine Optimierung auf der Optimization-Page.
+              No runs saved yet. Start an optimization on the Optimization page.
             </p>
           )}
 
