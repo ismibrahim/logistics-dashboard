@@ -176,7 +176,7 @@ async function runHeuristic() {
     router.push("/results")
   } catch (error) {
     console.error(error)
-    alert("Backend nicht erreichbar")
+    alert("Backend unreachable")
   } finally {
     setRunning(false)
   }
@@ -207,7 +207,7 @@ const selectedDemand = customers
         {optimizeError && (
           <div className="mb-6 flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-            <p>Optimierung konnte nicht gestartet werden: {optimizeError}</p>
+            <p>Optimization could not be started: {optimizeError}</p>
           </div>
         )}
         <div className="grid gap-6 lg:grid-cols-3">
@@ -243,7 +243,7 @@ const selectedDemand = customers
               {noCustomersSelected && (
                 <p className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-500">
                   <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                  Mindestens einen Kunden auswählen.
+                  Select at least one customer.
                 </p>
               )}
             </Card>
@@ -279,7 +279,7 @@ const selectedDemand = customers
               {noDepotsSelected && (
                 <p className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-500">
                   <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                  Mindestens ein Depot auswählen.
+                  Select at least one depot.
                 </p>
               )}
             </Card>
@@ -315,7 +315,7 @@ const selectedDemand = customers
               {noVehiclesSelected && (
                 <p className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-500">
                   <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                  Mindestens ein Fahrzeug auswählen.
+                  Select at least one vehicle.
                 </p>
               )}
             </Card>
@@ -341,7 +341,7 @@ const selectedDemand = customers
 
               {timeWindows && (
                 <div className="ml-8 space-y-2 rounded-md border border-border bg-muted/30 p-3">
-                  <p className="text-xs font-medium text-foreground">Zeitfenster-Overrides (max. 3 Kunden)</p>
+                  <p className="text-xs font-medium text-foreground">Time window overrides (max. 3 customers)</p>
                   {twOverrides.map((o, i) => {
                     const invalid =
                       o.cid !== "" &&
@@ -359,7 +359,7 @@ const selectedDemand = customers
                           }
                           className="min-w-0 flex-1 rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground"
                         >
-                          <option value="">Kunde…</option>
+                          <option value="">Customer…</option>
                           {customers.map((c: any) => (
                             <option key={c.customer_id} value={c.customer_id}>
                               {c.customer_id} — {c.name}
@@ -389,11 +389,11 @@ const selectedDemand = customers
                           type="button"
                           onClick={() => setTwOverrides((prev) => prev.filter((_, j) => j !== i))}
                           className="px-1 text-muted-foreground hover:text-destructive"
-                          aria-label="Zeile entfernen"
+                          aria-label="Remove row"
                         >
                           ×
                         </button>
-                        {invalid && <span className="text-[10px] text-destructive">ungültig</span>}
+                        {invalid && <span className="text-[10px] text-destructive">invalid</span>}
                       </div>
                     )
                   })}
@@ -403,7 +403,7 @@ const selectedDemand = customers
                       onClick={() => setTwOverrides((prev) => [...prev, { cid: "", start: "", end: "" }])}
                       className="text-xs text-primary hover:underline"
                     >
-                      + Zeile hinzufügen
+                      + Add row
                     </button>
                   )}
                   <p className="text-[10px] text-muted-foreground">
@@ -497,7 +497,7 @@ const selectedDemand = customers
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Selected</span>
-                  <span className="font-medium text-foreground">{selectedCustomerIds.size} Kunden</span>
+                  <span className="font-medium text-foreground">{selectedCustomerIds.size} customers</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Total demand</span>
@@ -509,11 +509,11 @@ const selectedDemand = customers
                 <p>Objective: <span className="font-medium text-foreground">Minimize distance</span></p>
                 <p>Time windows: <span className="font-medium text-foreground">{timeWindows ? "On" : "Off"}</span></p>
                 <p>Return to depot: <span className="font-medium text-foreground">{returnToDepot ? "On" : "Off"}</span></p>
-                <p>Warmstart (exakt): <span className="font-medium text-foreground">{useHeuristicWarmstart ? "On" : "Off"}</span></p>
+                <p>Warm start (exact): <span className="font-medium text-foreground">{useHeuristicWarmstart ? "On" : "Off"}</span></p>
                 <div className="flex items-center justify-between pt-1">
                   <label htmlFor="time-limit-seconds" className="flex items-center gap-1.5">
                     <Timer className="size-3.5" />
-                    Zeitlimit (Sekunden)
+                    Time limit (seconds)
                   </label>
                   <input
                     id="time-limit-seconds"
@@ -526,9 +526,9 @@ const selectedDemand = customers
                   />
                 </div>
                 <p className="text-[11px] italic text-muted-foreground/80">
-                  Gilt für den exakten Solver (Run Exact Solver auf der Ergebnis-Seite) UND
-                  für den "Solver vs. Heuristic Benchmark"-Block — beide nutzen jetzt dieses
-                  Zeitlimit. Standard: 60s, min. 5s, max. 1h.
+                  Applies to the exact solver (Run Exact Solver on the results page) AND
+                  the "Solver vs. Heuristic Benchmark" block — both now use this time
+                  limit. Default: 60s, min. 5s, max. 1h.
                 </p>
               </div>
             </Card>
@@ -547,10 +547,10 @@ const selectedDemand = customers
               {running ? "Optimizing routes…" : "Start Optimization"}
             </Button>
             <p className="text-center text-xs text-muted-foreground">
-              Berechnet sofort eine schnelle heuristische Lösung (Nearest Neighbor) -
-              unabhängig von der Instanzgröße. Den optionalen exakten Solver kannst du
-              danach auf der Ergebnis-Seite gezielt dazu starten (kann je nach Größe und
-              Zeitlimit deutlich länger dauern).
+              Instantly computes a fast heuristic solution (Nearest Neighbor) —
+              independent of instance size. You can trigger the optional exact solver
+              afterwards on the results page (can take significantly longer depending
+              on size and time limit).
             </p>
           </div>
         </div>
