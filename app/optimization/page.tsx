@@ -409,6 +409,9 @@ const selectedDemand = customers
                   <p className="text-[10px] text-muted-foreground">
                     Servicezeit kommt aus den Stammdaten. Format HH:MM, tw_start &lt; tw_end.
                   </p>
+                  <p className="text-[10px] text-muted-foreground">
+                    Each customer has a default time window from master data. Overrides replace it for up to 3 customers (demo use).
+                  </p>
                 </div>
               )}
 
@@ -468,6 +471,9 @@ const selectedDemand = customers
                   <span>1h</span>
                   <span>8h</span>
                 </div>
+                <p className="text-[10px] text-muted-foreground">
+                  Enforced by the exact solver only. Ignored by heuristic solvers.
+                </p>
               </div>
             </Card>
           </div>
