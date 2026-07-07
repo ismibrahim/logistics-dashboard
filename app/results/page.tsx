@@ -164,16 +164,27 @@ export default function ResultsPage() {
   const [customers, setCustomers] = useState<any[]>([])
   const [depots, setDepots] = useState<any[]>([])
 
-  const [compareData, setCompareData] = useState<any>(null)
-  const [compareLoading, setCompareLoading] = useState(false)
+  // /compare/heuristics und /compare/exact laufen unabhaengig voneinander
+  // (siehe runCompare()): NN/CW liegen in Millisekunden vor, waehrend der
+  // exakte Solver bis zu timeLimitSeconds braucht - daher getrennte State-
+  // Objekte statt eines gemeinsamen compareData, sonst haengen die laengst
+  // fertigen Heuristik-Spalten hinter dem langsamen Solver fest (siehe
+  // Diagnose 2026-07-07: fruehere Version nutzte den kombinierten /compare-
+  // Endpoint mit EINER Response fuer alle drei Methoden).
+  const [compareHeuristics, setCompareHeuristics] = useState<any>(null)
+  const [compareExact, setCompareExact] = useState<any>(null)
+  const [heuristicsLoading, setHeuristicsLoading] = useState(false)
+  const [exactLoading, setExactLoading] = useState(false)
+  const compareLoading = heuristicsLoading || exactLoading
   const [compareError, setCompareError] = useState<string | null>(null)
-  // Sequenz-Guard: /compare kann bis zu COMPARE_TIME_LIMIT_S (300s) dauern -
-  // ueberlappende Aufrufe (z.B. initialer Load + spaeterer "Erneut
-  // vergleichen"-Klick) koennen daher in beliebiger Reihenfolge antworten.
-  // Nur die Antwort des zuletzt GESTARTETEN Calls darf den State setzen,
-  // sonst kann eine aeltere, aber langsamere Antwort eine bereits aktuellere
-  // ueberschreiben (siehe Diagnose: gerenderte "Render-Reste" eines frueheren
-  // Laufs trotz fehlgeschlagenem neuem Compare-Versuch).
+  // Sequenz-Guard: /compare/exact kann bis zu timeLimitSeconds dauern -
+  // ueberlappende Aufrufe (z.B. initialer Load + spaeterer "Compare again"-
+  // Klick) koennen daher in beliebiger Reihenfolge antworten. Nur die
+  // Antwort des zuletzt GESTARTETEN Calls darf den State setzen, sonst kann
+  // eine aeltere, aber langsamere Antwort eine bereits aktuellere ueber-
+  // schreiben. Ein gemeinsamer Zaehler + AbortController fuer BEIDE
+  // Requests (Heuristics und Exact), da beide zum selben runCompare()-
+  // Aufruf gehoeren.
   const compareRequestIdRef = useRef(0)
   const compareAbortRef = useRef<AbortController | null>(null)
   // /compare soll automatisch nur EINMAL pro Results-Besuch laufen (beim
@@ -203,55 +214,94 @@ export default function ResultsPage() {
   const hasRoutingInfo = customerIdsForCompare.length > 0
   const [showUnroutedCustomers, setShowUnroutedCustomers] = useState(true)
 
+  function buildCompareParams(customerIds: number[]): URLSearchParams {
+    const params = new URLSearchParams()
+    customerIds.forEach((id) => params.append("customer_ids", String(id)))
+    ;(lastOptimizeRequest?.depot_ids ?? []).forEach((id: number) =>
+      params.append("depot_ids", String(id))
+    )
+    ;(lastOptimizeRequest?.vehicle_ids ?? []).forEach((id: number) =>
+      params.append("vehicle_ids", String(id))
+    )
+    return params
+  }
+
+  // Startet /compare/heuristics (NN + Clarke-Wright, ~ms) und /compare/exact
+  // (MILP, bis zu timeLimitSeconds) unabhaengig voneinander - kein await
+  // nacheinander, sonst haengen die laengst fertigen Heuristik-Ergebnisse
+  // hinter dem langsamen exakten Solver fest (siehe Diagnose 2026-07-07).
+  // Beide Requests teilen sich denselben Sequenz-Guard (requestId/Abort-
+  // Controller), da sie zum selben "Compare again"-Klick gehoeren: ein
+  // spaeterer Klick verwirft veraltete Antworten von BEIDEN Endpoints.
   async function runCompare(customerIds: number[]) {
     if (customerIds.length === 0) return
 
-    // Eine evtl. noch laufende aeltere Anfrage abbrechen (bricht clientseitig
-    // die Verbindung ab; der Backend-Solver selbst laeuft synchron weiter,
-    // aber die veraltete Antwort wird dadurch schneller verworfen) und den
-    // Request-Zaehler erhoehen, bevor der neue fetch rausgeht.
     compareAbortRef.current?.abort()
     const controller = new AbortController()
     compareAbortRef.current = controller
     const requestId = ++compareRequestIdRef.current
 
-    // State sofort leeren, BEVOR der neue Call raus geht - waehrend der
-    // (bis zu 300s) Wartezeit soll kein alter Stand sichtbar bleiben, sondern
-    // ein klarer Lade-/Leerzustand (siehe Per-Karte-Platzhalter unten).
-    setCompareData(null)
-    setCompareLoading(true)
+    // State sofort leeren, BEVOR die neuen Calls raus gehen - waehrend der
+    // Wartezeit soll kein alter Stand sichtbar bleiben, sondern ein klarer
+    // Lade-/Leerzustand (siehe Per-Karte-Platzhalter unten).
+    setCompareHeuristics(null)
+    setCompareExact(null)
+    setHeuristicsLoading(true)
+    setExactLoading(true)
     setCompareError(null)
 
-    try {
-      const params = new URLSearchParams()
-      customerIds.forEach((id) => params.append("customer_ids", String(id)))
-      ;(lastOptimizeRequest?.depot_ids ?? []).forEach((id: number) =>
-        params.append("depot_ids", String(id))
-      )
-      ;(lastOptimizeRequest?.vehicle_ids ?? []).forEach((id: number) =>
-        params.append("vehicle_ids", String(id))
-      )
-      // Einheitliches Zeitlimit: derselbe Wert wie der exakte Solver (/optimize).
-      params.append("time_limit_s", String(lastOptimizeRequest?.timeLimitSeconds ?? 60))
-      const response = await fetch(`http://127.0.0.1:8000/compare?${params.toString()}`, {
-        signal: controller.signal,
-      })
-      const data = await response.json()
-
-      if (requestId !== compareRequestIdRef.current) return // laengst ueberholt, verwerfen
-
-      setCompareData(data)
-    } catch (error: any) {
-      if (requestId !== compareRequestIdRef.current) return
-      if (error?.name !== "AbortError") {
-        console.error(error)
-        setCompareError("Backend unreachable")
+    // Heuristiken: unabhaengiger Fetch, liefert i.d.R. innerhalb weniger
+    // Millisekunden - NN- und CW-Spalte fuellen sich sofort.
+    ;(async () => {
+      try {
+        const params = buildCompareParams(customerIds)
+        const response = await fetch(
+          `http://127.0.0.1:8000/compare/heuristics?${params.toString()}`,
+          { signal: controller.signal },
+        )
+        const data = await response.json()
+        if (requestId !== compareRequestIdRef.current) return // laengst ueberholt, verwerfen
+        setCompareHeuristics(data)
+      } catch (error: any) {
+        if (requestId !== compareRequestIdRef.current) return
+        if (error?.name !== "AbortError") {
+          console.error(error)
+          setCompareError("Backend unreachable")
+        }
+      } finally {
+        if (requestId === compareRequestIdRef.current) {
+          setHeuristicsLoading(false)
+        }
       }
-    } finally {
-      if (requestId === compareRequestIdRef.current) {
-        setCompareLoading(false)
+    })()
+
+    // Exakter Solver: unabhaengiger Fetch, kann bis zu timeLimitSeconds
+    // dauern - fuellt die Exact-Spalte, sobald sein Ergebnis eintrifft,
+    // unabhaengig vom Status der Heuristik-Spalten.
+    ;(async () => {
+      try {
+        const params = buildCompareParams(customerIds)
+        // Einheitliches Zeitlimit: derselbe Wert wie der exakte Solver (/optimize).
+        params.append("time_limit_s", String(lastOptimizeRequest?.timeLimitSeconds ?? 60))
+        const response = await fetch(
+          `http://127.0.0.1:8000/compare/exact?${params.toString()}`,
+          { signal: controller.signal },
+        )
+        const data = await response.json()
+        if (requestId !== compareRequestIdRef.current) return
+        setCompareExact(data)
+      } catch (error: any) {
+        if (requestId !== compareRequestIdRef.current) return
+        if (error?.name !== "AbortError") {
+          console.error(error)
+          setCompareError("Backend unreachable")
+        }
+      } finally {
+        if (requestId === compareRequestIdRef.current) {
+          setExactLoading(false)
+        }
       }
-    }
+    })()
   }
 
   // Benchmark-Vergleich wird automatisch genau EINMAL pro Results-Besuch
@@ -266,7 +316,7 @@ export default function ResultsPage() {
     }
   }, [solverResult])
 
-  const compareNotSolved = compareData?.solved === false
+  const compareNotSolved = compareExact?.solved === false
 
 
 useEffect(() => {
@@ -286,9 +336,9 @@ useEffect(() => {
 }, [])
 
   const solverRoutes = buildMapRoutes(solverResult, vehicles)
-  const exactCompareRoutes = buildMapRoutes(compareData?.exact, vehicles)
-  const heuristicCompareRoutes = buildMapRoutes(compareData?.heuristic, vehicles)
-  const cwCompareRoutes = buildMapRoutes(compareData?.clarke_wright, vehicles)
+  const exactCompareRoutes = buildMapRoutes(compareExact?.exact, vehicles)
+  const heuristicCompareRoutes = buildMapRoutes(compareHeuristics?.heuristic, vehicles)
+  const cwCompareRoutes = buildMapRoutes(compareHeuristics?.clarke_wright, vehicles)
   const routeDetails = buildRouteDetails(solverResult, vehicles, customers, depots)
 
   const mapCustomers = customers.map((c: any) => ({
@@ -323,9 +373,26 @@ useEffect(() => {
     return mapDepots.filter((d: any) => usedDepotIds.has(Number(d.id)))
   }
 
-  const exactCompareDepot = depotsUsedInRoutes(compareData?.exact)
-  const heuristicCompareDepot = depotsUsedInRoutes(compareData?.heuristic)
-  const cwCompareDepot = depotsUsedInRoutes(compareData?.clarke_wright)
+  const exactCompareDepot = depotsUsedInRoutes(compareExact?.exact)
+  const heuristicCompareDepot = depotsUsedInRoutes(compareHeuristics?.heuristic)
+  const cwCompareDepot = depotsUsedInRoutes(compareHeuristics?.clarke_wright)
+
+  // Gap-% kommt bei /compare/heuristics und /compare/exact nicht mehr aus dem
+  // Backend (die beiden Endpoints laufen unabhaengig, keiner kennt das
+  // Ergebnis des jeweils anderen) - daher hier client-seitig nachgerechnet,
+  // sobald beide Distanzen vorliegen. Gleiche Formel wie zuvor im Backend:
+  // nur gueltig, wenn der exakte Solver eine bewiesen optimale Loesung fand.
+  const exactDistanceForGap = compareExact?.exact?.distance_km ?? null
+  const exactIsOptimal =
+    compareExact?.solver_status === "Optimal" && exactDistanceForGap != null && exactDistanceForGap > 0
+  const nnGapPercent =
+    exactIsOptimal && compareHeuristics?.heuristic?.distance_km != null
+      ? Math.round(((compareHeuristics.heuristic.distance_km - exactDistanceForGap) / exactDistanceForGap) * 1000) / 10
+      : null
+  const cwGapPercent =
+    exactIsOptimal && compareHeuristics?.clarke_wright?.distance_km != null
+      ? Math.round(((compareHeuristics.clarke_wright.distance_km - exactDistanceForGap) / exactDistanceForGap) * 1000) / 10
+      : null
 
   // Toggle wirkt nur auf die Kunden-Marker; Depots bleiben immer sichtbar.
   // Ohne eindeutige Routing-Info (hasRoutingInfo === false) immer alle zeigen,
@@ -663,7 +730,7 @@ const totalCost =
 
           {!compareError && compareNotSolved && (
             <p className="text-sm text-destructive">
-              Comparison not possible (status: {compareData.solver_status}).
+              Comparison not possible (status: {compareExact.solver_status}).
             </p>
           )}
 
@@ -674,7 +741,7 @@ const totalCost =
                   <Cpu className="size-3.5" /> Exact Solver (MILP)
                 </span>
               </div>
-              {compareData?.exact ? (
+              {compareExact?.exact ? (
                 <MapPanel
                   className="h-[360px] rounded-none border-0"
                   routes={exactCompareRoutes}
@@ -683,7 +750,7 @@ const totalCost =
                 />
               ) : (
                 <div className="flex h-[360px] items-center justify-center px-6 text-center text-sm text-muted-foreground">
-                  {compareLoading ? "Comparing…" : "No result (exact solver found no solution)."}
+                  {exactLoading ? "Comparing…" : "No result (exact solver found no solution)."}
                 </div>
               )}
             </Card>
@@ -693,7 +760,7 @@ const totalCost =
                   <Zap className="size-3.5" /> Nearest Neighbor (Heuristic)
                 </span>
               </div>
-              {compareData?.heuristic ? (
+              {compareHeuristics?.heuristic ? (
                 <MapPanel
                   className="h-[360px] rounded-none border-0"
                   routes={heuristicCompareRoutes}
@@ -702,7 +769,7 @@ const totalCost =
                 />
               ) : (
                 <div className="flex h-[360px] items-center justify-center px-6 text-center text-sm text-muted-foreground">
-                  {compareLoading ? "Comparing…" : "No result."}
+                  {heuristicsLoading ? "Comparing…" : "No result."}
                 </div>
               )}
             </Card>
@@ -712,7 +779,7 @@ const totalCost =
                   <Zap className="size-3.5" /> Clarke-Wright + 2-Opt + Or-Opt (Heuristic)
                 </span>
               </div>
-              {compareData?.clarke_wright ? (
+              {compareHeuristics?.clarke_wright ? (
                 <MapPanel
                   className="h-[360px] rounded-none border-0"
                   routes={cwCompareRoutes}
@@ -721,13 +788,13 @@ const totalCost =
                 />
               ) : (
                 <div className="flex h-[360px] items-center justify-center px-6 text-center text-sm text-muted-foreground">
-                  {compareLoading ? "Comparing…" : "No result."}
+                  {heuristicsLoading ? "Comparing…" : "No result."}
                 </div>
               )}
             </Card>
           </div>
 
-          {!compareError && !compareNotSolved && compareData && (
+          {!compareError && (compareHeuristics || compareExact) && (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -741,30 +808,30 @@ const totalCost =
                 <tbody>
                   <tr className="border-b border-border last:border-0">
                     <td className="px-5 py-3.5 font-medium text-foreground">Total Distance</td>
-                    <td className="px-5 py-3.5 text-muted-foreground">{compareData.exact?.distance_km != null ? `${compareData.exact.distance_km.toFixed(2)} km` : "– (no solution within time limit)"}</td>
-                    <td className="px-5 py-3.5 text-muted-foreground">{compareData.heuristic?.distance_km != null ? `${compareData.heuristic.distance_km.toFixed(2)} km` : "–"}</td>
-                    <td className="px-5 py-3.5 text-muted-foreground">{compareData.clarke_wright?.distance_km != null ? `${compareData.clarke_wright.distance_km.toFixed(2)} km` : "–"}</td>
+                    <td className="px-5 py-3.5 text-muted-foreground">{compareExact?.exact?.distance_km != null ? `${compareExact.exact.distance_km.toFixed(2)} km` : exactLoading ? "Comparing…" : "– (no solution within time limit)"}</td>
+                    <td className="px-5 py-3.5 text-muted-foreground">{compareHeuristics?.heuristic?.distance_km != null ? `${compareHeuristics.heuristic.distance_km.toFixed(2)} km` : heuristicsLoading ? "Comparing…" : "–"}</td>
+                    <td className="px-5 py-3.5 text-muted-foreground">{compareHeuristics?.clarke_wright?.distance_km != null ? `${compareHeuristics.clarke_wright.distance_km.toFixed(2)} km` : heuristicsLoading ? "Comparing…" : "–"}</td>
                   </tr>
                   <tr className="border-b border-border last:border-0">
                     <td className="px-5 py-3.5 font-medium text-foreground">Total Cost</td>
-                    <td className="px-5 py-3.5 text-muted-foreground">{compareData.exact?.cost != null ? `${compareData.exact.cost.toFixed(2)} €` : "–"}</td>
-                    <td className="px-5 py-3.5 text-muted-foreground">{compareData.heuristic?.cost != null ? `${compareData.heuristic.cost.toFixed(2)} €` : "–"}</td>
-                    <td className="px-5 py-3.5 text-muted-foreground">{compareData.clarke_wright?.cost != null ? `${compareData.clarke_wright.cost.toFixed(2)} €` : "–"}</td>
+                    <td className="px-5 py-3.5 text-muted-foreground">{compareExact?.exact?.cost != null ? `${compareExact.exact.cost.toFixed(2)} €` : exactLoading ? "Comparing…" : "–"}</td>
+                    <td className="px-5 py-3.5 text-muted-foreground">{compareHeuristics?.heuristic?.cost != null ? `${compareHeuristics.heuristic.cost.toFixed(2)} €` : heuristicsLoading ? "Comparing…" : "–"}</td>
+                    <td className="px-5 py-3.5 text-muted-foreground">{compareHeuristics?.clarke_wright?.cost != null ? `${compareHeuristics.clarke_wright.cost.toFixed(2)} €` : heuristicsLoading ? "Comparing…" : "–"}</td>
                   </tr>
                   <tr className="border-b border-border last:border-0">
                     <td className="px-5 py-3.5 font-medium text-foreground">Runtime</td>
-                    <td className="px-5 py-3.5 text-muted-foreground">{compareData.exact?.runtime_s?.toFixed(3)} s</td>
-                    <td className="px-5 py-3.5 text-muted-foreground">{compareData.heuristic?.runtime_s?.toFixed(3)} s</td>
-                    <td className="px-5 py-3.5 text-muted-foreground">{compareData.clarke_wright?.runtime_s?.toFixed(3)} s</td>
+                    <td className="px-5 py-3.5 text-muted-foreground">{compareExact?.exact?.runtime_s != null ? `${compareExact.exact.runtime_s.toFixed(3)} s` : exactLoading ? "Comparing…" : "–"}</td>
+                    <td className="px-5 py-3.5 text-muted-foreground">{compareHeuristics?.heuristic?.runtime_s != null ? `${compareHeuristics.heuristic.runtime_s.toFixed(3)} s` : heuristicsLoading ? "Comparing…" : "–"}</td>
+                    <td className="px-5 py-3.5 text-muted-foreground">{compareHeuristics?.clarke_wright?.runtime_s != null ? `${compareHeuristics.clarke_wright.runtime_s.toFixed(3)} s` : heuristicsLoading ? "Comparing…" : "–"}</td>
                   </tr>
                   <tr className="border-b border-border last:border-0">
                     <td className="px-5 py-3.5 font-medium text-foreground">Gap</td>
                     <td className="px-5 py-3.5 text-muted-foreground">—</td>
                     <td className="px-5 py-3.5 text-muted-foreground">
-                      {compareData.heuristic?.gap_percent != null ? `${compareData.heuristic.gap_percent >= 0 ? "+" : ""}${compareData.heuristic.gap_percent.toFixed(1)}%` : "–"}
+                      {nnGapPercent != null ? `${nnGapPercent >= 0 ? "+" : ""}${nnGapPercent.toFixed(1)}%` : "–"}
                     </td>
                     <td className="px-5 py-3.5 text-muted-foreground">
-                      {compareData.clarke_wright?.gap_percent != null ? `${compareData.clarke_wright.gap_percent >= 0 ? "+" : ""}${compareData.clarke_wright.gap_percent.toFixed(1)}%` : "–"}
+                      {cwGapPercent != null ? `${cwGapPercent >= 0 ? "+" : ""}${cwGapPercent.toFixed(1)}%` : "–"}
                     </td>
                   </tr>
                 </tbody>
