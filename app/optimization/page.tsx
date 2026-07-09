@@ -17,7 +17,6 @@ export default function OptimizationPage() {
   const router = useRouter()
   const [timeWindows, setTimeWindows] = useState(false)
   const [returnToDepot, setReturnToDepot] = useState(true)
-  const [balanceLoad, setBalanceLoad] = useState(false)
   const [useHeuristicWarmstart, setUseHeuristicWarmstart] = useState(true)
   const [twOverrides, setTwOverrides] = useState<Array<{ cid: number | ""; start: string; end: string }>>([])
   const [maxDuration, setMaxDuration] = useState([99999])
@@ -136,7 +135,6 @@ async function runHeuristic() {
       returnToDepot,
       timeWindows,
       timeWindowOverrides,
-      balanceLoad,
       useHeuristicWarmstart,
       maxDuration: maxDuration[0],
       timeLimitSeconds,
@@ -424,17 +422,6 @@ const selectedDemand = customers
                   </div>
                 </div>
                 <Switch checked={returnToDepot} onCheckedChange={setReturnToDepot} />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="flex items-start gap-3">
-                  <Truck className="mt-0.5 size-5 text-muted-foreground" />
-                  <div>
-                    <p className="text-sm font-medium text-foreground">Balance vehicle load</p>
-                    <p className="text-xs text-muted-foreground">Distribute demand evenly across the fleet</p>
-                  </div>
-                </div>
-                <Switch checked={balanceLoad} onCheckedChange={setBalanceLoad} />
               </div>
 
               <div className="flex items-center justify-between">
