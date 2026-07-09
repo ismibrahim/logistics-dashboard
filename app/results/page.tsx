@@ -27,6 +27,25 @@ const VEHICLE_COLORS = [
   "#db2777", // pink
 ]
 
+// Backend-Ankunftszeiten sind unbegrenzt akkumulierte "HH:MM"-Strings (siehe
+// cvrp_solver.compute_arrival_schedule - keine Fahrer-Arbeitszeitgrenze, kein
+// Modulo 24h) - z.B. "26:00" fuer eine Route, die real ~20h nach Depot-Start
+// dauert. Fuer die Anzeige hier in Uhrzeit + Tages-Offset aufgeteilt, damit
+// "26:00" als "02:00 (+1 day)" lesbar wird. Die Zeitfenster-Vergleichslogik
+// (Verspaetungs-Erkennung) bleibt bewusst auf dem rohen "HH:MM"-String -
+// siehe Diagnose 2026-07-09: der Vergleich funktioniert bereits korrekt ohne
+// Modulo, weil beide Seiten gleich formatiert sind.
+function formatTimeString(hhmm: string): string {
+  const [hStr, mStr] = hhmm.split(":")
+  const totalMinutes = parseInt(hStr, 10) * 60 + parseInt(mStr, 10)
+  if (totalMinutes < 1440) return hhmm
+  const days = Math.floor(totalMinutes / 1440)
+  const remainder = totalMinutes % 1440
+  const hh = Math.floor(remainder / 60).toString().padStart(2, "0")
+  const mm = (remainder % 60).toString().padStart(2, "0")
+  return `${hh}:${mm} (+${days} day${days === 1 ? "" : "s"})`
+}
+
 // Baut das MapPanel-"routes"-Format aus einem Solver-/Compare-Ergebnis
 // (gemeinsame Form: {routes: [[vehicleId, nodeIds]], coordinates: {nodeId: [lat,lng]}}).
 // Wird fuer den Haupt-/optimize-Lauf UND beide /compare-Seiten genutzt.
@@ -937,7 +956,7 @@ const totalCost =
                                   : "text-[11px] text-muted-foreground"
                             }
                           >
-                            🕒 {stop.arrival}
+                            🕒 {formatTimeString(stop.arrival)}
                             {stop.window ? ` · ${stop.window.tw_start}–${stop.window.tw_end}` : ""}
                             {stop.window && stop.arrival < stop.window.tw_start ? " (waiting)" : ""}
                           </span>
