@@ -506,7 +506,7 @@ const selectedDemand = customers
                     id="time-limit-seconds"
                     type="number"
                     min={5}
-                    max={3600}
+                    max={86400}
                     value={timeLimitSeconds}
                     onChange={(e) => setTimeLimitSeconds(Number(e.target.value))}
                     className="w-16 rounded-md border border-input bg-background px-2 py-1 text-right text-xs text-foreground"
@@ -515,7 +515,7 @@ const selectedDemand = customers
                 <p className="text-[11px] italic text-muted-foreground/80">
                   Applies to the exact solver (Run Exact Solver on the results page) AND
                   the "Solver vs. Heuristic Benchmark" block — both now use this time
-                  limit. Default: 60s, min. 5s, max. 1h.
+                  limit. Default: 60s, min. 5s, max. 24h.
                 </p>
               </div>
             </Card>
